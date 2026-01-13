@@ -1,9 +1,8 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence, getAuth } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getFunctions } from 'firebase/functions';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Firebase Configuration
@@ -21,27 +20,8 @@ const firebaseConfig = {
 // Initialize Firebase - singleton pattern
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-// Lazy auth initialization to avoid re-initialization errors
-let _auth = null;
-const getAuthInstance = () => {
-  if (_auth) return _auth;
-  
-  try {
-    _auth = initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage)
-    });
-  } catch (error) {
-    if (error.code === 'auth/already-initialized') {
-      _auth = getAuth(app);
-    } else {
-      throw error;
-    }
-  }
-  return _auth;
-};
-
-// Initialize Firebase services
-export const auth = getAuthInstance();
+// Initialize Firebase services (web-compatible)
+export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
