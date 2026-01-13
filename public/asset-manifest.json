@@ -1,0 +1,21 @@
+{
+  "files": {
+    "main.js": "/static/js/main.f687285c.js",
+    "static/js/147.00eb7968.js": "/static/js/147.00eb7968.js",
+    "static/media/Ionicons.ttf": "/static/media/Ionicons.9b6b1954a5eb6efeaf11.ttf",
+    "static/media/MaterialIcons.ttf": "/static/media/MaterialIcons.f20305dee9d396fea5c7.ttf",
+    "static/media/logoMoova.png": "/static/media/logoMoova.7ff32793ad59c5239568.png",
+    "favicon.ico": "/favicon.ico",
+    "index.html": "/index.html",
+    "favicon-32.png": "/favicon-32.png",
+    "favicon-16.png": "/favicon-16.png",
+    "manifest.json": "/manifest.json",
+    "serve.json": "/serve.json",
+    "main.f687285c.js.map": "/static/js/main.f687285c.js.map",
+    "147.00eb7968.js.map": "/static/js/147.00eb7968.js.map"
+  },
+  "entrypoints": [
+    "static/js/147.00eb7968.js",
+    "static/js/main.f687285c.js"
+  ]
+}
