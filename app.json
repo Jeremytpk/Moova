@@ -29,7 +29,8 @@
       ]
     },
     "web": {
-  "favicon": "./assets/logoMoova.png"
-    }
+      "favicon": "./assets/logoMoova.png"
+    },
+    "platforms": ["ios", "android", "web"]
   }
 }
