@@ -26,22 +26,7 @@ import PaymentModal from '../components/PaymentModal';
  */
 export default function ChatScreen({ route, navigation }) {
   // Security: Prevent screenshots and screen recording
-  useEffect(() => {
-    if (Platform.OS === 'android' || Platform.OS === 'ios') {
-      try {
-        const { default: RNPreventScreenshot } = require('react-native-prevent-screenshot');
-        RNPreventScreenshot.forbid();
-      } catch (e) {
-        // If library not available, ignore
-      }
-    }
-    return () => {
-      try {
-        const { default: RNPreventScreenshot } = require('react-native-prevent-screenshot');
-        RNPreventScreenshot.allow();
-      } catch (e) {}
-    };
-  }, []);
+  // Screenshot blocking removed for web compatibility
   const { offerId, otherUserId, otherUserName, chatId: existingChatId } = route.params;
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState('');
