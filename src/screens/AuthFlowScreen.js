@@ -18,6 +18,7 @@ export default function AuthFlowScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const { language } = useLanguage();
@@ -35,7 +36,10 @@ export default function AuthFlowScreen({ navigation }) {
       emailPlaceholder: 'you@example.com',
       password: 'Password',
       passwordPlaceholder: '••••••••',
-      pleaseWait: 'Please wait...',
+  pleaseWait: 'Please wait...',
+  phone: 'Phone Number',
+  phonePlaceholder: '+1 234 567 8901',
+  enterPhone: 'Please enter your phone number',
       signUp: 'Sign Up',
       signIn: 'Sign In',
       alreadyHaveAccount: 'Already have an account? Sign In',
@@ -67,7 +71,10 @@ export default function AuthFlowScreen({ navigation }) {
       emailPlaceholder: 'vous@exemple.com',
       password: 'Mot de Passe',
       passwordPlaceholder: '••••••••',
-      pleaseWait: 'Veuillez patienter...',
+  pleaseWait: 'Veuillez patienter...',
+  phone: 'Numéro de téléphone',
+  phonePlaceholder: '+243 970 000 000',
+  enterPhone: 'Veuillez entrer votre numéro de téléphone',
       signUp: 'S\'inscrire',
       signIn: 'Se Connecter',
       alreadyHaveAccount: 'Vous avez déjà un compte? Se Connecter',
@@ -138,6 +145,10 @@ export default function AuthFlowScreen({ navigation }) {
       Alert.alert(text.error, text.enterFullName);
       return;
     }
+    if (isSignUp && !phone) {
+      Alert.alert(text.error, text.enterPhone);
+      return;
+    }
 
     setLoading(true);
 
@@ -156,6 +167,7 @@ export default function AuthFlowScreen({ navigation }) {
           uid: user.uid,
           email: email,
           name: name,
+          phone: phone,
           username: username,
           createdAt: new Date().toISOString(),
           role: 'user', // Can be 'user', 'sender', or 'traveler'
@@ -218,6 +230,9 @@ export default function AuthFlowScreen({ navigation }) {
           />
           {/* <Text style={styles.brandName}>Moova</Text> */}
         </View>
+        <Text style={styles.poweredBy}>
+          by Jerttech
+        </Text>
         <Text style={styles.tagline}>
           {isSignUp ? text.joinCommunity : text.welcomeBack}
         </Text>
@@ -232,15 +247,25 @@ export default function AuthFlowScreen({ navigation }) {
         </Text>
 
         {isSignUp && (
-          <Input
-            label={text.fullName}
-            value={name}
-            onChangeText={setName}
-            placeholder={text.fullNamePlaceholder}
-            style={styles.input}
-          />
+          <>
+            <Input
+              label={text.fullName}
+              value={name}
+              onChangeText={setName}
+              placeholder={text.fullNamePlaceholder}
+              style={styles.input}
+            />
+            <Input
+              label={text.phone}
+              value={phone}
+              onChangeText={setPhone}
+              placeholder={text.phonePlaceholder}
+              keyboardType="phone-pad"
+              style={styles.input}
+            />
+          </>
         )}
-
+        
         <Input
           label={text.email}
           value={email}
@@ -320,10 +345,20 @@ const styles = StyleSheet.create({
   },
   heroSection: {
     backgroundColor: theme.colors.primary,
-    paddingTop: theme.spacing.xl,
+    paddingTop: theme.spacing.xxl,
     paddingBottom: theme.spacing.lg,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
     paddingHorizontal: theme.spacing.md,
     alignItems: 'center',
+  },
+  poweredBy: {
+    fontSize: 14,
+    color: theme.colors.background,
+    opacity: 0.8,
+    marginTop: theme.spacing.xs,
+    fontWeight: '500',
+    right: 6, 
   },
   brandContainer: {
     flexDirection: 'row',
@@ -348,7 +383,7 @@ const styles = StyleSheet.create({
     opacity: 0.95,
     fontWeight: '600',
     textAlign: 'center',
-    marginTop: theme.spacing.xs,
+    marginTop: theme.spacing.md,
   },
   content: {
     padding: theme.spacing.lg,

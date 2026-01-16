@@ -1,4 +1,5 @@
-import { collection, doc, setDoc, addDoc, serverTimestamp, query, where, getDocs, updateDoc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, serverTimestamp, updateDoc, getDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../config/firebaseConfig';
 
 /**
@@ -207,101 +208,83 @@ export const sendPaymentRequest = async (chatId, currentUserId, otherUserId, kg,
 };
 
 /**
- * Process payment and update offer
+ * Create Payment Intent with Stripe
  * @param {object} paymentInfo - Payment information
+ * @returns {Promise<object>} - { clientSecret, paymentIntentId } or null
+ */
+export const createPaymentIntent = async (paymentInfo) => {
+  try {
+    console.log('Creating payment intent...', paymentInfo);
+
+    const functions = getFunctions();
+    const createPaymentIntentFn = httpsCallable(functions, 'createPaymentIntent');
+
+    const result = await createPaymentIntentFn({
+      amount: paymentInfo.amount,
+      kg: paymentInfo.kg,
+      offerId: paymentInfo.offerId,
+      travelerId: paymentInfo.travelerId,
+      currency: 'usd',
+    });
+
+    console.log('Payment intent created:', result.data);
+    return result.data; // { clientSecret, paymentIntentId }
+  } catch (error) {
+    console.error('Error creating payment intent:', error);
+    throw error;
+  }
+};
+
+/**
+ * Confirm payment and update database
+ * Called after Stripe payment is successful
+ * @param {object} paymentInfo - Payment information including paymentIntentId
  * @returns {Promise<boolean>} - Success or failure
+ */
+export const confirmPayment = async (paymentInfo) => {
+  try {
+    console.log('Confirming payment...', paymentInfo);
+
+    const functions = getFunctions();
+    const confirmPaymentFn = httpsCallable(functions, 'confirmPayment');
+
+    const result = await confirmPaymentFn({
+      paymentIntentId: paymentInfo.paymentIntentId,
+      offerId: paymentInfo.offerId,
+      kg: paymentInfo.kg,
+      amount: paymentInfo.amount,
+      travelerId: paymentInfo.travelerId,
+      fullName: paymentInfo.fullName,
+      email: paymentInfo.email,
+    });
+
+    console.log('Payment confirmed successfully:', result.data);
+    return result.data.success;
+  } catch (error) {
+    console.error('Error confirming payment:', error);
+    return false;
+  }
+};
+
+/**
+ * Process payment (legacy function - kept for backward compatibility)
+ * Now creates a payment intent instead of simulating payment
+ * @param {object} paymentInfo - Payment information
+ * @returns {Promise<object>} - Payment intent data or false
  */
 export const processPayment = async (paymentInfo) => {
   try {
     console.log('Processing payment...', paymentInfo);
-    
-    // Simulate payment processing (in real app, this would call Stripe/PayPal API)
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate network delay
-    
-    // Random success/failure for demonstration (80% success rate)
-    const success = Math.random() > 0.2;
-    
-    if (!success) {
-      throw new Error('Payment failed');
-    }
-    
-    // Update the offer's sales
-    const offerRef = doc(db, 'offers', paymentInfo.offerId);
-    const offerDoc = await getDoc(offerRef);
-    
-    if (!offerDoc.exists()) {
-      throw new Error('Offer not found');
-    }
-    
-    const offerData = offerDoc.data();
-    console.log('Offer data for shipment:', offerData);
-    
-    const newAvailableCapacity = offerData.availableCapacity - paymentInfo.kg;
-    const currentEarnings = offerData.totalEarnings || 0;
-    const newTotalEarnings = currentEarnings + paymentInfo.amount;
-    
-    // Create new sale record
-    const sales = offerData.sales || [];
-    const newSale = {
-      id: Date.now().toString(),
-      kg: paymentInfo.kg,
+
+    // Create payment intent with Stripe
+    const paymentIntentData = await createPaymentIntent({
       amount: paymentInfo.amount,
-      date: Timestamp.now(),
-      buyerEmail: paymentInfo.email,
-      buyerName: paymentInfo.fullName,
-    };
-    
-    // Update offer
-    await updateDoc(offerRef, {
-      availableCapacity: newAvailableCapacity,
-      totalEarnings: newTotalEarnings,
-      sales: [...sales, newSale],
-      updatedAt: Timestamp.now(),
-    });
-    
-    // Generate a 6-digit verification passcode
-    const generatePasscode = () => {
-      return Math.floor(100000 + Math.random() * 900000).toString();
-    };
-    
-    // Generate a 6-character alphanumeric tracking/order number
-    const generateOrderNumber = () => {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      let orderNumber = '';
-      for (let i = 0; i < 6; i++) {
-        orderNumber += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return orderNumber;
-    };
-    
-    // Create a shipment record in the buyer's shipments subcollection
-    const shipmentData = {
+      kg: paymentInfo.kg,
       offerId: paymentInfo.offerId,
-      orderNumber: generateOrderNumber(),
-      travelerId: offerData.userId || offerData.travelerId,
-      travelerName: offerData.userUsername || offerData.userName || offerData.travelerName || 'Traveler',
-      senderId: paymentInfo.senderId,
-      senderName: paymentInfo.fullName,
-      senderEmail: paymentInfo.email,
-      kg: paymentInfo.kg,
-      amount: paymentInfo.amount,
-      pricePerKg: offerData.pricePerKg || 0,
-      departure: offerData.origin || offerData.departure || offerData.from || 'Unknown',
-      arrival: offerData.destination || offerData.arrival || offerData.to || 'Unknown',
-      departureDate: offerData.date || offerData.departureDate || null,
-      arrivalDate: offerData.date || offerData.arrivalDate || null,
-      status: 'pending', // pending, picked_up, in_transit, delivered
-      verificationCode: generatePasscode(),
-      paymentDate: serverTimestamp(),
-      createdAt: serverTimestamp(),
-    };
-    
-    // Add to sender's shipments subcollection
-    const senderShipmentsRef = collection(db, 'users', paymentInfo.senderId, 'shipments');
-    await addDoc(senderShipmentsRef, shipmentData);
-    
-    console.log('Payment processed successfully and shipment created');
-    return true;
+      travelerId: paymentInfo.travelerId,
+    });
+
+    return paymentIntentData; // Return clientSecret for the payment modal
   } catch (error) {
     console.error('Error processing payment:', error);
     return false;

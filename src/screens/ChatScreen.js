@@ -15,15 +15,33 @@ import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/fi
 import { db, auth } from '../config/firebaseConfig';
 import theme from '../theme';
 import { useLanguage } from '../contexts/LanguageContext';
-import { getOrCreateChat, sendMessage as sendChatMessage, sendPaymentRequest, processPayment } from '../utils/chatHelpers';
+import { getOrCreateChat, sendMessage as sendChatMessage, sendPaymentRequest, createPaymentIntent, confirmPayment } from '../utils/chatHelpers';
 import SellKgModal from '../components/SellKgModal';
 import PaymentResultModal from '../components/PaymentResultModal';
+import PaymentModal from '../components/PaymentModal';
 
 /**
  * ChatScreen
  * Real-time chat between sender and traveler
  */
 export default function ChatScreen({ route, navigation }) {
+  // Security: Prevent screenshots and screen recording
+  useEffect(() => {
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      try {
+        const { default: RNPreventScreenshot } = require('react-native-prevent-screenshot');
+        RNPreventScreenshot.forbid();
+      } catch (e) {
+        // If library not available, ignore
+      }
+    }
+    return () => {
+      try {
+        const { default: RNPreventScreenshot } = require('react-native-prevent-screenshot');
+        RNPreventScreenshot.allow();
+      } catch (e) {}
+    };
+  }, []);
   const { offerId, otherUserId, otherUserName, chatId: existingChatId } = route.params;
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState('');
@@ -32,11 +50,13 @@ export default function ChatScreen({ route, navigation }) {
   const [offer, setOffer] = useState(null);
   const [showSellKgModal, setShowSellKgModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showEditPaymentModal, setShowEditPaymentModal] = useState(false);
   const [editingPaymentMessage, setEditingPaymentMessage] = useState(null);
   const [editedAmount, setEditedAmount] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [selectedPaymentRequest, setSelectedPaymentRequest] = useState(null);
+  const [paymentIntentData, setPaymentIntentData] = useState(null);
   const flatListRef = useRef(null);
   const currentUser = auth.currentUser;
   const { language } = useLanguage();
@@ -142,12 +162,15 @@ export default function ChatScreen({ route, navigation }) {
 
   const sendMessage = async () => {
     if (!messageText.trim() || !currentUser || !chatId) return;
-
+    // Block sending sensitive info
+    const sensitiveRegex = /(\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b|\b\d{10,}\b|zelle|cashapp|payment id)/i;
+    if (sensitiveRegex.test(messageText)) {
+      Alert.alert('Prohibited', 'Sharing email addresses, phone numbers, or payment IDs (Zelle, CashApp) is not allowed.');
+      return;
+    }
     try {
       await sendChatMessage(chatId, currentUser.uid, otherUserId, messageText.trim());
-      
       setMessageText('');
-      // Scroll to bottom after sending
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
@@ -155,6 +178,9 @@ export default function ChatScreen({ route, navigation }) {
       console.error('Error sending message:', error);
       alert('Failed to send message. Please try again.');
     }
+  // Only allow photo proof of package
+  // (Assume photo sending logic is in sendPhotoProof function)
+  // All other photo sharing is prohibited
   };
 
   const handleSendPaymentRequest = async (kg, amount) => {
@@ -175,23 +201,55 @@ export default function ChatScreen({ route, navigation }) {
 
   const handlePayNow = async (paymentData) => {
     try {
-      // Set the selected payment request for the result modal
+      // Set the selected payment request
       setSelectedPaymentRequest(paymentData);
-      
-      // Directly process payment without showing the modal
-      const success = await processPayment({
-        fullName: 'Sender',
-        email: currentUser?.email || 'sender@example.com',
+
+      // Create payment intent with Stripe
+      const intentData = await createPaymentIntent({
+        amount: paymentData.amount,
+        kg: paymentData.kg,
+        offerId: offerId,
+        travelerId: otherUserId,
+      });
+
+      if (!intentData || !intentData.clientSecret) {
+        Alert.alert('Error', 'Failed to initialize payment. Please try again.');
+        return;
+      }
+
+      // Store payment intent data and show payment modal
+      setPaymentIntentData({
+        ...intentData,
         amount: paymentData.amount,
         kg: paymentData.kg,
         offerId: offerId,
         travelerId: otherUserId,
         senderId: currentUser?.uid,
       });
-      
+      setShowPaymentModal(true);
+    } catch (error) {
+      console.error('Payment initialization error:', error);
+      Alert.alert('Error', 'Failed to initialize payment. Please try again.');
+    }
+  };
+
+  const handleProcessPayment = async (paymentInfo) => {
+    try {
+      // Confirm payment with backend
+      const success = await confirmPayment({
+        paymentIntentId: paymentInfo.paymentIntentId,
+        offerId: paymentInfo.offerId,
+        kg: paymentInfo.kg,
+        amount: paymentInfo.amount,
+        travelerId: paymentInfo.travelerId,
+        fullName: paymentInfo.fullName,
+        email: paymentInfo.email,
+      });
+
+      setShowPaymentModal(false);
       setPaymentSuccess(success);
       setShowResultModal(true);
-      
+
       if (success) {
         // Reload offer to get updated capacity
         const offerDoc = await getDoc(doc(db, 'offers', offerId));
@@ -200,7 +258,8 @@ export default function ChatScreen({ route, navigation }) {
         }
       }
     } catch (error) {
-      console.error('Payment error:', error);
+      console.error('Payment confirmation error:', error);
+      setShowPaymentModal(false);
       setPaymentSuccess(false);
       setShowResultModal(true);
     }
@@ -597,6 +656,13 @@ export default function ChatScreen({ route, navigation }) {
           onSendPaymentRequest={handleSendPaymentRequest}
         />
       )}
+
+      <PaymentModal
+        visible={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        paymentRequest={paymentIntentData}
+        onProcessPayment={handleProcessPayment}
+      />
 
       <PaymentResultModal
         visible={showResultModal}

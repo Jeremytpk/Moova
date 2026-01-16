@@ -1,35 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Modal, Image } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { collection, addDoc, Timestamp, doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../config/firebaseConfig';
 import theme from '../theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
+import Loading from '../components/Loading';
+import TravelerRequiredModal from '../components/TravelerRequiredModal';
 import { useLanguage } from '../contexts/LanguageContext';
 
 /**
  * CreateOfferScreen
- * Allows travelers to create new shipment offers
+ * Allows travelers to create new shipment offers or edit existing ones
  * Requires authentication
  */
-export default function CreateOfferScreen({ navigation }) {
+export default function CreateOfferScreen({ navigation, route }) {
+  const { offerId, isEditing } = route?.params || {};
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('Kinshasa');
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pricePerKg, setPricePerKg] = useState('');
   const [capacity, setCapacity] = useState('');
+  const [totalEarnings, setTotalEarnings] = useState(0);
   const [errors, setErrors] = useState({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showTravelerModal, setShowTravelerModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checkingTraveler, setCheckingTraveler] = useState(true);
   const { language } = useLanguage();
 
   // Translations
   const translations = {
     en: {
       createNewOffer: 'Create New Offer',
+      editOffer: 'Edit Offer',
       offerDescription: 'Offer to bring packages from your location to Kinshasa',
+      editDescription: 'Update your travel offer details',
       originLabel: 'Origin City, State, Country',
       originPlaceholder: 'e.g., New York',
       destinationLabel: 'Destination City, Country',
@@ -39,12 +47,18 @@ export default function CreateOfferScreen({ navigation }) {
       pricePlaceholder: '0.00',
       availableCapacity: 'Available Capacity (kg)',
       capacityPlaceholder: '0',
+      totalEarnings: 'Total Earnings',
       createOffer: 'Create Offer',
+      updateOffer: 'Update Offer',
       creatingOffer: 'Creating Offer...',
+      updatingOffer: 'Updating Offer...',
       offerCreated: 'Offer Created!',
+      offerUpdated: 'Offer Updated!',
       offerCreatedMsg: 'Your travel offer from',
+      offerUpdatedMsg: 'Your travel offer from',
       to: 'to',
       successCreated: 'has been successfully created.',
+      successUpdated: 'has been successfully updated.',
       sendersCanFind: 'Senders can now find and book your offer!',
       done: 'Done',
       originRequired: 'Origin city is required',
@@ -54,10 +68,14 @@ export default function CreateOfferScreen({ navigation }) {
       capacityRequired: 'Capacity is required',
       validCapacity: 'Please enter a valid capacity',
       failedToCreate: 'Failed to create offer. Please try again.',
+      failedToUpdate: 'Failed to update offer. Please try again.',
+      failedToLoad: 'Failed to load offer details. Please try again.',
     },
     fr: {
       createNewOffer: 'Créer une Nouvelle Offre',
+      editOffer: 'Modifier l\'Offre',
       offerDescription: 'Proposez d\'apporter des colis de votre emplacement à Kinshasa',
+      editDescription: 'Mettre à jour les détails de votre offre de voyage',
       originLabel: 'Ville d\'Origine, État, Pays',
       originPlaceholder: 'ex: Paris',
       destinationLabel: 'Ville de Destination, Pays',
@@ -67,12 +85,18 @@ export default function CreateOfferScreen({ navigation }) {
       pricePlaceholder: '0.00',
       availableCapacity: 'Capacité Disponible (kg)',
       capacityPlaceholder: '0',
+      totalEarnings: 'Gains Totaux',
       createOffer: 'Créer l\'Offre',
+      updateOffer: 'Mettre à Jour l\'Offre',
       creatingOffer: 'Création en cours...',
+      updatingOffer: 'Mise à jour en cours...',
       offerCreated: 'Offre Créée!',
+      offerUpdated: 'Offre Mise à Jour!',
       offerCreatedMsg: 'Votre offre de voyage de',
+      offerUpdatedMsg: 'Votre offre de voyage de',
       to: 'vers',
       successCreated: 'a été créée avec succès.',
+      successUpdated: 'a été mise à jour avec succès.',
       sendersCanFind: 'Les expéditeurs peuvent maintenant trouver et réserver votre offre!',
       done: 'Terminé',
       originRequired: 'La ville d\'origine est requise',
@@ -82,10 +106,77 @@ export default function CreateOfferScreen({ navigation }) {
       capacityRequired: 'La capacité est requise',
       validCapacity: 'Veuillez entrer une capacité valide',
       failedToCreate: 'Échec de la création de l\'offre. Veuillez réessayer.',
+      failedToUpdate: 'Échec de la mise à jour de l\'offre. Veuillez réessayer.',
+      failedToLoad: 'Échec du chargement des détails de l\'offre. Veuillez réessayer.',
     },
   };
 
   const text = translations[language];
+
+  // Check if user is a traveler before allowing offer creation
+  useEffect(() => {
+    checkTravelerStatus();
+  }, []);
+
+  // Load existing offer data when editing
+  useEffect(() => {
+    if (isEditing && offerId) {
+      loadOfferData();
+    }
+  }, [isEditing, offerId]);
+
+  const checkTravelerStatus = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      setCheckingTraveler(false);
+      return;
+    }
+
+    try {
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const isTraveler = userData.isTraveler || false;
+        const hasTravelerPayment = userData.travelerPayment &&
+          (userData.travelerPayment.zelleEmail || userData.travelerPayment.cashappTag);
+
+        if (!isTraveler || !hasTravelerPayment) {
+          // Not a traveler or missing payment info - show custom modal
+          setShowTravelerModal(true);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error checking traveler status:', error);
+    } finally {
+      setCheckingTraveler(false);
+    }
+  };
+
+  const loadOfferData = async () => {
+    setLoading(true);
+    try {
+      const offerDoc = await getDoc(doc(db, 'offers', offerId));
+      if (offerDoc.exists()) {
+        const data = offerDoc.data();
+        setOrigin(data.origin || '');
+        setDestination(data.destination || 'Kinshasa');
+        setDate(data.date?.toDate() || new Date());
+        setPricePerKg(data.pricePerKg?.toString() || '');
+        setCapacity(data.availableCapacity?.toString() || '');
+        setTotalEarnings(data.totalEarnings || 0);
+      } else {
+        alert(text.failedToLoad);
+        navigation.goBack();
+      }
+    } catch (error) {
+      console.error('Error loading offer:', error);
+      alert(text.failedToLoad);
+      navigation.goBack();
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(Platform.OS === 'ios'); // Keep open on iOS
@@ -138,66 +229,109 @@ export default function CreateOfferScreen({ navigation }) {
 
     try {
       const user = auth.currentUser;
-      
+
       if (!user) {
         console.error('No user logged in');
         setLoading(false);
         return;
       }
 
-      // Create offer document in Firestore
-      // Get user's username from Firestore
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const userData = userDoc.exists() ? userDoc.data() : {};
-      const username = userData.username || userData.name || user.email;
-      
-      const offerData = {
-        origin: origin.trim(),
-        destination: destination.trim(),
-        date: Timestamp.fromDate(date),
-        pricePerKg: parseFloat(pricePerKg),
-        availableCapacity: parseInt(capacity),
-        totalCapacity: parseInt(capacity),
-        status: 'active',
-        userId: user.uid,
-        userEmail: user.email,
-        userUsername: username,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      };
+      if (isEditing && offerId) {
+        // Update existing offer
+        const offerData = {
+          origin: origin.trim(),
+          destination: destination.trim(),
+          date: Timestamp.fromDate(date),
+          pricePerKg: parseFloat(pricePerKg),
+          availableCapacity: parseInt(capacity),
+          updatedAt: Timestamp.now(),
+        };
 
-      await addDoc(collection(db, 'offers'), offerData);
-      
-      console.log('Offer created successfully:', offerData);
+        await updateDoc(doc(db, 'offers', offerId), offerData);
+        console.log('Offer updated successfully:', offerData);
+      } else {
+        // Create new offer
+        // Get user's username from Firestore
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const userData = userDoc.exists() ? userDoc.data() : {};
+        const username = userData.username || userData.name || user.email;
+
+        const offerData = {
+          origin: origin.trim(),
+          destination: destination.trim(),
+          date: Timestamp.fromDate(date),
+          pricePerKg: parseFloat(pricePerKg),
+          availableCapacity: parseInt(capacity),
+          totalCapacity: parseInt(capacity),
+          status: 'active',
+          userId: user.uid,
+          userEmail: user.email,
+          userUsername: username,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        };
+
+        await addDoc(collection(db, 'offers'), offerData);
+        console.log('Offer created successfully:', offerData);
+      }
+
       setLoading(false);
       setShowSuccessModal(true);
     } catch (error) {
-      console.error('Error creating offer:', error);
+      console.error(`Error ${isEditing ? 'updating' : 'creating'} offer:`, error);
       setLoading(false);
       // Show error to user
-      alert(text.failedToCreate);
+      alert(isEditing ? text.failedToUpdate : text.failedToCreate);
     }
   };
 
   const handleSuccessClose = () => {
     setShowSuccessModal(false);
-    // Reset form
-    setOrigin('');
-    setDestination('Kinshasa');
-    setDate(new Date());
-    setPricePerKg('');
-    setCapacity('');
-    setErrors({});
-    // Navigate back to search screen
-    navigation.navigate('SearchResults');
+    if (isEditing) {
+      // Go back to My Offers when editing
+      navigation.navigate('MyOffers');
+    } else {
+      // Reset form and navigate to search when creating
+      setOrigin('');
+      setDestination('Kinshasa');
+      setDate(new Date());
+      setPricePerKg('');
+      setCapacity('');
+      setErrors({});
+      navigation.navigate('Search');
+    }
   };
 
+  // Show loading while checking traveler status
+  if (checkingTraveler) {
+    return <Loading fullScreen />;
+  }
+
+  // If not a traveler, show only the modal (no form)
+  if (showTravelerModal) {
+    return (
+      <View style={styles.container}>
+        <TravelerRequiredModal
+          visible={true}
+          onClose={() => {
+            navigation.goBack();
+          }}
+          onSetup={() => {
+            // Replace current screen with TravelerSetup
+            navigation.replace('TravelerSetup');
+          }}
+        />
+      </View>
+    );
+  }
+
+  // Only show the form if user is a confirmed traveler
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>{text.createNewOffer}</Text>
+        <Text style={styles.title}>{isEditing ? text.editOffer : text.createNewOffer}</Text>
         <Text style={styles.subtitle}>
-          {text.offerDescription}
+          {isEditing ? text.editDescription : text.offerDescription}
         </Text>
 
         <Input
@@ -266,8 +400,16 @@ export default function CreateOfferScreen({ navigation }) {
           error={errors.capacity}
         />
 
+        {/* Show total earnings if editing and earnings exist */}
+        {isEditing && totalEarnings > 0 && (
+          <View style={styles.earningsContainer}>
+            <Text style={styles.earningsLabel}>{text.totalEarnings}</Text>
+            <Text style={styles.earningsValue}>${totalEarnings.toFixed(2)}</Text>
+          </View>
+        )}
+
         <Button
-          title={loading ? text.creatingOffer : text.createOffer}
+          title={loading ? (isEditing ? text.updatingOffer : text.creatingOffer) : (isEditing ? text.updateOffer : text.createOffer)}
           variant="primary"
           onPress={handleSubmit}
           disabled={loading}
@@ -296,9 +438,9 @@ export default function CreateOfferScreen({ navigation }) {
               <Text style={styles.successIcon}>✓</Text>
             </View>
 
-            <Text style={styles.modalTitle}>{text.offerCreated}</Text>
+            <Text style={styles.modalTitle}>{isEditing ? text.offerUpdated : text.offerCreated}</Text>
             <Text style={styles.modalMessage}>
-              {text.offerCreatedMsg} <Text style={styles.boldText}>{origin}</Text> {text.to} <Text style={styles.boldText}>{destination}</Text> {text.successCreated}
+              {isEditing ? text.offerUpdatedMsg : text.offerCreatedMsg} <Text style={styles.boldText}>{origin}</Text> {text.to} <Text style={styles.boldText}>{destination}</Text> {isEditing ? text.successUpdated : text.successCreated}
             </Text>
             <Text style={styles.modalSubMessage}>
               {text.sendersCanFind}
@@ -360,6 +502,27 @@ const styles = StyleSheet.create({
   button: {
     marginTop: theme.spacing.md,
   },
+  earningsContainer: {
+    backgroundColor: theme.colors.success + '15',
+    borderWidth: 1,
+    borderColor: theme.colors.success,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  earningsLabel: {
+    ...theme.typography.body,
+    color: theme.colors.text,
+    fontWeight: '600',
+  },
+  earningsValue: {
+    ...theme.typography.h3,
+    color: theme.colors.success,
+    fontWeight: '700',
+  },
 
   // Modal Styles
   modalOverlay: {
@@ -390,7 +553,7 @@ const styles = StyleSheet.create({
   logo: {
     width: 60,
     height: 60,
-    borderRadius: 15,
+    borderRadius: 100,
   },
   successIconContainer: {
     width: 60,

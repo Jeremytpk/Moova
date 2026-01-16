@@ -5,7 +5,7 @@ import { collection, query, where, getDocs, doc, deleteDoc } from 'firebase/fire
 import { db, auth } from '../config/firebaseConfig';
 import theme from '../theme';
 import Loading from '../components/Loading';
-import { AirplaneIcon, EmptyMailboxIcon } from '../components/Icons';
+import { EmptyMailboxIcon, DeleteIcon, DollarBillIcon, EditIcon } from '../components/Icons';
 import { useLanguage } from '../contexts/LanguageContext';
 
 /**
@@ -26,6 +26,7 @@ export default function MyOffersScreen({ navigation }) {
       totalEarnings: 'Total Earnings',
       active: '✓ Active',
       inactive: '○ Inactive',
+      expired: '⊘ Expired',
       to: 'to',
       available: 'Available',
       of: 'of',
@@ -40,12 +41,14 @@ export default function MyOffersScreen({ navigation }) {
       deleteSuccess: 'Offer deleted successfully',
       deleteError: 'Failed to delete offer',
       viewDeliveries: 'View My Deliveries',
+      editOffer: 'Edit',
     },
     fr: {
       myOffers: 'Mes Offres',
       totalEarnings: 'Gains Totaux',
       active: '✓ Actif',
       inactive: '○ Inactif',
+      expired: '⊘ Expiré',
       to: 'vers',
       available: 'Disponible',
       of: 'sur',
@@ -60,6 +63,7 @@ export default function MyOffersScreen({ navigation }) {
       deleteSuccess: 'Offre supprimée avec succès',
       deleteError: 'Échec de la suppression de l\'offre',
       viewDeliveries: 'Voir Mes Livraisons',
+      editOffer: 'Modifier',
     },
   };
 
@@ -169,10 +173,21 @@ export default function MyOffersScreen({ navigation }) {
     }
   };
 
+  const handleEditOffer = (offerId) => {
+    navigation.navigate('CreateOffer', {
+      offerId: offerId,
+      isEditing: true
+    });
+  };
+
   const renderOfferCard = ({ item }) => {
     const capacityPercentage = ((item.totalCapacity - item.availableCapacity) / item.totalCapacity) * 100;
     const earnings = item.totalEarnings || 0;
-    
+
+    // Check if offer is expired based on travel date
+    const isExpired = item.date && item.date.toDate ? item.date.toDate() < new Date() : false;
+    const displayStatus = isExpired ? 'expired' : item.status;
+
     return (
       <TouchableOpacity
         style={styles.card}
@@ -182,20 +197,28 @@ export default function MyOffersScreen({ navigation }) {
         <View style={styles.cardHeader}>
           <View style={[
             styles.statusBadge,
-            item.status === 'active' ? styles.activeBadge : styles.inactiveBadge
+            displayStatus === 'active' ? styles.activeBadge :
+            displayStatus === 'expired' ? styles.expiredBadge : styles.inactiveBadge
           ]}>
             <Text style={styles.statusText}>
-              {item.status === 'active' ? text.active : text.inactive}
+              {displayStatus === 'active' ? text.active :
+               displayStatus === 'expired' ? text.expired : text.inactive}
             </Text>
           </View>
-          
+
           <View style={styles.dateAndDeleteContainer}>
             <Text style={styles.dateText}>{formatDate(item.date)}</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => handleEditOffer(item.id)}
+            >
+              <EditIcon size={18} color={theme.colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
               style={styles.deleteButton}
               onPress={() => handleDeleteOffer(item.id, `${item.origin} → ${item.destination}`)}
             >
-              <Text style={styles.deleteIcon}>✕</Text>
+              <DeleteIcon size={18} color={theme.colors.error} />
             </TouchableOpacity>
           </View>
         </View>
@@ -203,12 +226,10 @@ export default function MyOffersScreen({ navigation }) {
         {/* Route */}
         <View style={styles.routeContainer}>
           <View style={styles.locationWrapper}>
-            <Text style={styles.locationIcon}>📍</Text>
             <Text style={styles.cityText}>{item.origin}</Text>
           </View>
           <Text style={styles.planeIcon}>✈️</Text>
           <View style={styles.locationWrapper}>
-            <Text style={styles.locationIcon}>📍</Text>
             <Text style={styles.cityText}>{item.destination}</Text>
           </View>
         </View>
@@ -244,7 +265,10 @@ export default function MyOffersScreen({ navigation }) {
         {/* Earnings */}
         {earnings > 0 && (
           <View style={styles.earningsContainer}>
-            <Text style={styles.earningsLabel}>💰 {text.earned}:</Text>
+            <View style={styles.earningsLabelContainer}>
+              <DollarBillIcon size={14} color={theme.colors.success} />
+              <Text style={styles.earningsLabel}>{text.earned}:</Text>
+            </View>
             <Text style={styles.earningsValue}>${earnings.toFixed(2)}</Text>
           </View>
         )}
@@ -304,7 +328,10 @@ export default function MyOffersScreen({ navigation }) {
         {/* Total Earnings Card */}
         {totalEarnings > 0 && (
           <View style={styles.totalEarningsCard}>
-            <Text style={styles.totalEarningsLabel}>💰 {text.totalEarnings}</Text>
+            <View style={styles.totalEarningsLabelContainer}>
+              <DollarBillIcon size={16} color={theme.colors.success} />
+              <Text style={styles.totalEarningsLabel}>{text.totalEarnings}</Text>
+            </View>
             <Text style={styles.totalEarningsValue}>${totalEarnings.toFixed(2)}</Text>
           </View>
         )}
@@ -380,10 +407,15 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
+  totalEarningsLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
+  },
   totalEarningsLabel: {
     ...theme.typography.caption,
     color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
     fontSize: 14,
   },
   totalEarningsValue: {
@@ -445,6 +477,9 @@ const styles = StyleSheet.create({
   inactiveBadge: {
     backgroundColor: theme.colors.backgroundSecondary,
   },
+  expiredBadge: {
+    backgroundColor: '#FFE5E5',
+  },
   statusText: {
     ...theme.typography.caption,
     color: theme.colors.text,
@@ -458,11 +493,19 @@ const styles = StyleSheet.create({
   dateAndDeleteContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  editButton: {
+    padding: theme.spacing.xs,
+    marginLeft: theme.spacing.xs,
+  },
+  editIcon: {
+    fontSize: 20,
+    color: theme.colors.primary,
+    fontWeight: 'bold',
   },
   deleteButton: {
     padding: theme.spacing.xs,
-    marginLeft: theme.spacing.xs,
   },
   deleteIcon: {
     fontSize: 22,
@@ -478,10 +521,6 @@ const styles = StyleSheet.create({
   locationWrapper: {
     flex: 1,
     alignItems: 'center',
-  },
-  locationIcon: {
-    fontSize: 24,
-    marginBottom: theme.spacing.xs,
   },
   cityText: {
     ...theme.typography.body,
@@ -544,6 +583,11 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.sm,
     borderTopWidth: 1,
     borderTopColor: theme.colors.backgroundSecondary,
+  },
+  earningsLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   earningsLabel: {
     ...theme.typography.body,

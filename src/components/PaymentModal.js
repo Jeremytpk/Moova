@@ -8,27 +8,34 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { CardField, useStripe } from '@stripe/stripe-react-native';
 import theme from '../theme';
 import { useLanguage } from '../contexts/LanguageContext';
+import { calculateFeeBreakdown, formatCurrency, getServiceFeeDescription } from '../utils/feeCalculations';
 
 /**
  * PaymentModal
  * Modal for sender to enter payment information
  */
-export default function PaymentModal({ 
-  visible, 
-  onClose, 
-  paymentRequest, // { kg, amount, offerId, travelerId }
+export default function PaymentModal({
+  visible,
+  onClose,
+  paymentRequest, // { kg, amount, pricePerKg, offerId, travelerId, clientSecret }
   onProcessPayment,
 }) {
   const { language } = useLanguage();
+  const { confirmPayment } = useStripe();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiryDate, setExpiryDate] = useState('');
-  const [cvv, setCvv] = useState('');
+  const [cardComplete, setCardComplete] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Calculate fee breakdown
+  const feeBreakdown = paymentRequest?.kg && paymentRequest?.pricePerKg
+    ? calculateFeeBreakdown(paymentRequest.kg, paymentRequest.pricePerKg)
+    : null;
 
   // Translations
   const translations = {
@@ -37,6 +44,9 @@ export default function PaymentModal({
       amount: 'Amount',
       forKg: 'for',
       kg: 'kg',
+      basePrice: 'Base Price',
+      serviceFee: 'Service Fee',
+      totalAmount: 'Total Amount',
       personalInfo: 'Personal Information',
       fullName: 'Full Name',
       email: 'Email',
@@ -57,6 +67,9 @@ export default function PaymentModal({
       amount: 'Montant',
       forKg: 'pour',
       kg: 'kg',
+      basePrice: 'Prix de Base',
+      serviceFee: 'Frais de Service',
+      totalAmount: 'Montant Total',
       personalInfo: 'Informations Personnelles',
       fullName: 'Nom Complet',
       email: 'Email',
@@ -80,39 +93,9 @@ export default function PaymentModal({
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
-  const validateCardNumber = (number) => {
-    const cleaned = number.replace(/\s/g, '');
-    return /^\d{16}$/.test(cleaned);
-  };
-
-  const validateExpiry = (expiry) => {
-    return /^\d{2}\/\d{2}$/.test(expiry);
-  };
-
-  const validateCvv = (cvv) => {
-    return /^\d{3,4}$/.test(cvv);
-  };
-
-  const handleCardNumberChange = (value) => {
-    // Format card number with spaces (XXXX XXXX XXXX XXXX)
-    const cleaned = value.replace(/\s/g, '');
-    const formatted = cleaned.match(/.{1,4}/g)?.join(' ') || cleaned;
-    setCardNumber(formatted.substring(0, 19)); // Max 16 digits + 3 spaces
-  };
-
-  const handleExpiryChange = (value) => {
-    // Format expiry date (MM/YY)
-    const cleaned = value.replace(/\D/g, '');
-    if (cleaned.length >= 2) {
-      setExpiryDate(cleaned.substring(0, 2) + '/' + cleaned.substring(2, 4));
-    } else {
-      setExpiryDate(cleaned);
-    }
-  };
-
   const handleSubmit = async () => {
     // Validation
-    if (!fullName || !email || !cardNumber || !expiryDate || !cvv) {
+    if (!fullName || !email) {
       Alert.alert('Error', text.fillAllFields);
       return;
     }
@@ -122,46 +105,58 @@ export default function PaymentModal({
       return;
     }
 
-    if (!validateCardNumber(cardNumber)) {
-      Alert.alert('Error', text.invalidCard);
+    if (!cardComplete) {
+      Alert.alert('Error', 'Please enter valid card details');
       return;
     }
 
-    if (!validateExpiry(expiryDate)) {
-      Alert.alert('Error', text.invalidExpiry);
-      return;
-    }
-
-    if (!validateCvv(cvv)) {
-      Alert.alert('Error', text.invalidCvv);
+    if (!paymentRequest?.clientSecret) {
+      Alert.alert('Error', 'Payment setup failed. Please try again.');
       return;
     }
 
     setLoading(true);
 
     try {
-      // Process payment
-      await onProcessPayment({
-        fullName,
-        email,
-        cardNumber: cardNumber.replace(/\s/g, ''),
-        expiryDate,
-        cvv,
-        amount: paymentRequest.amount,
-        kg: paymentRequest.kg,
-        offerId: paymentRequest.offerId,
-        travelerId: paymentRequest.travelerId,
-        senderId: paymentRequest.senderId,
+      // Confirm payment with Stripe
+      const { error, paymentIntent } = await confirmPayment(paymentRequest.clientSecret, {
+        paymentMethodType: 'Card',
+        paymentMethodData: {
+          billingDetails: {
+            name: fullName,
+            email: email,
+          },
+        },
       });
 
-      // Reset form
-      setFullName('');
-      setEmail('');
-      setCardNumber('');
-      setExpiryDate('');
-      setCvv('');
+      if (error) {
+        console.error('Payment confirmation error:', error);
+        Alert.alert('Payment Failed', error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (paymentIntent && paymentIntent.status === 'Succeeded') {
+        // Payment successful - call the backend to update the database
+        await onProcessPayment({
+          fullName,
+          email,
+          amount: paymentRequest.amount,
+          kg: paymentRequest.kg,
+          offerId: paymentRequest.offerId,
+          travelerId: paymentRequest.travelerId,
+          senderId: paymentRequest.senderId,
+          paymentIntentId: paymentIntent.id,
+        });
+
+        // Reset form
+        setFullName('');
+        setEmail('');
+        setCardComplete(false);
+      }
     } catch (error) {
       console.error('Payment error:', error);
+      Alert.alert('Error', 'Payment processing failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -179,16 +174,39 @@ export default function PaymentModal({
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={styles.modalTitle}>{text.paymentDetails}</Text>
 
-            {/* Amount Summary */}
-            <View style={styles.amountCard}>
-              <Text style={styles.amountLabel}>{text.amount}</Text>
-              <Text style={styles.amountValue}>
-                ${paymentRequest?.amount.toFixed(2)}
-              </Text>
-              <Text style={styles.kgText}>
-                {text.forKg} {paymentRequest?.kg}{text.kg}
-              </Text>
-            </View>
+            {/* Amount Summary with Fee Breakdown */}
+            {feeBreakdown ? (
+              <View style={styles.amountCard}>
+                <Text style={styles.amountLabel}>{text.forKg} {paymentRequest?.kg}{text.kg}</Text>
+
+                {/* Fee Breakdown */}
+                <View style={styles.feeBreakdown}>
+                  <View style={styles.feeRow}>
+                    <Text style={styles.feeLabel}>{text.basePrice}</Text>
+                    <Text style={styles.feeValue}>{formatCurrency(feeBreakdown.basePrice)}</Text>
+                  </View>
+                  <View style={styles.feeRow}>
+                    <Text style={styles.feeLabel}>{getServiceFeeDescription(feeBreakdown.kg)}</Text>
+                    <Text style={styles.feeValue}>{formatCurrency(feeBreakdown.serviceFee)}</Text>
+                  </View>
+                  <View style={styles.feeDivider} />
+                  <View style={styles.feeRow}>
+                    <Text style={styles.feeLabelTotal}>{text.totalAmount}</Text>
+                    <Text style={styles.feeValueTotal}>{formatCurrency(feeBreakdown.senderTotal)}</Text>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.amountCard}>
+                <Text style={styles.amountLabel}>{text.amount}</Text>
+                <Text style={styles.amountValue}>
+                  ${paymentRequest?.amount.toFixed(2)}
+                </Text>
+                <Text style={styles.kgText}>
+                  {text.forKg} {paymentRequest?.kg}{text.kg}
+                </Text>
+              </View>
+            )}
 
             {/* Personal Information */}
             <Text style={styles.sectionTitle}>{text.personalInfo}</Text>
@@ -221,47 +239,27 @@ export default function PaymentModal({
             {/* Card Information */}
             <Text style={styles.sectionTitle}>{text.cardInfo}</Text>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>{text.cardNumber}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="1234 5678 9012 3456"
-                placeholderTextColor={theme.colors.textLight}
-                value={cardNumber}
-                onChangeText={handleCardNumberChange}
-                keyboardType="number-pad"
-                maxLength={19}
+            <View style={styles.cardFieldContainer}>
+              <CardField
+                postalCodeEnabled={false}
+                placeholders={{
+                  number: '4242 4242 4242 4242',
+                }}
+                cardStyle={{
+                  backgroundColor: '#FFFFFF',
+                  textColor: theme.colors.text,
+                  placeholderColor: theme.colors.textLight,
+                }}
+                style={styles.cardField}
+                onCardChange={(cardDetails) => {
+                  setCardComplete(cardDetails.complete);
+                }}
               />
             </View>
 
-            <View style={styles.row}>
-              <View style={[styles.inputGroup, styles.halfWidth]}>
-                <Text style={styles.label}>{text.expiryDate}</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="MM/YY"
-                  placeholderTextColor={theme.colors.textLight}
-                  value={expiryDate}
-                  onChangeText={handleExpiryChange}
-                  keyboardType="number-pad"
-                  maxLength={5}
-                />
-              </View>
-
-              <View style={[styles.inputGroup, styles.halfWidth]}>
-                <Text style={styles.label}>{text.cvv}</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="123"
-                  placeholderTextColor={theme.colors.textLight}
-                  value={cvv}
-                  onChangeText={setCvv}
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  secureTextEntry
-                />
-              </View>
-            </View>
+            <Text style={styles.testCardHint}>
+              Test card: 4242 4242 4242 4242 | Any future date | Any 3 digits
+            </Text>
 
             {/* Buttons */}
             <View style={styles.buttonRow}>
@@ -278,9 +276,13 @@ export default function PaymentModal({
                 onPress={handleSubmit}
                 disabled={loading}
               >
-                <Text style={styles.submitButtonText}>
-                  {text.payNow}
-                </Text>
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.submitButtonText}>
+                    {text.payNow}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -404,5 +406,61 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  cardFieldContainer: {
+    marginBottom: theme.spacing.md,
+  },
+  cardField: {
+    width: '100%',
+    height: 50,
+    marginVertical: theme.spacing.xs,
+  },
+  testCardHint: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginBottom: theme.spacing.md,
+    textAlign: 'center',
+  },
+  feeBreakdown: {
+    width: '100%',
+    marginTop: theme.spacing.md,
+  },
+  feeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
+  },
+  feeLabel: {
+    ...theme.typography.body,
+    color: '#FFFFFF',
+    opacity: 0.9,
+    fontSize: 14,
+  },
+  feeValue: {
+    ...theme.typography.body,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  feeLabelTotal: {
+    ...theme.typography.body,
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  feeValueTotal: {
+    ...theme.typography.h2,
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  feeDivider: {
+    height: 1,
+    backgroundColor: '#FFFFFF',
+    opacity: 0.3,
+    marginVertical: theme.spacing.sm,
   },
 });

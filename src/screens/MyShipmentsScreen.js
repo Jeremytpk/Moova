@@ -22,7 +22,7 @@ export default function MyShipmentsScreen({ navigation }) {
   const translations = {
     en: {
       title: 'My Shipments',
-      subtitle: 'Track your packages to Kinshasa with the Bridge Tracker',
+      subtitle: 'Track your packages to Kinshasa here',
       noShipments: 'No shipments yet',
       noShipmentsDesc: 'Your shipments will appear here after you make a purchase',
       from: 'From',
@@ -45,7 +45,7 @@ export default function MyShipmentsScreen({ navigation }) {
     },
     fr: {
       title: 'Mes Expéditions',
-      subtitle: 'Suivez vos colis vers Kinshasa avec Bridge Tracker',
+      subtitle: 'Suivez vos colis vers ici',
       noShipments: 'Aucune expédition',
       noShipmentsDesc: 'Vos expéditions apparaîtront ici après un achat',
       from: 'De',

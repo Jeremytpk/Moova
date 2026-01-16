@@ -9,17 +9,17 @@ import {
   TextInput,
   Image,
   Modal,
-  Platform,
-  StatusBar,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { useRef } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../config/firebaseConfig';
 import theme from '../theme';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import Loading from '../components/Loading';
-import { SearchIcon, CloseIcon, LocationIcon, AirplaneIcon, EmptyMailboxIcon, SearchNotFoundIcon, FilterIcon, ProfileIcon } from '../components/Icons';
+import { SearchIcon, CloseIcon, LocationIcon, EmptyMailboxIcon, SearchNotFoundIcon, FilterIcon, ProfileIcon, RefreshIcon } from '../components/Icons';
 import { useLanguage } from '../contexts/LanguageContext';
 
 // Mock data for development (when Firebase is not configured)
@@ -69,6 +69,7 @@ const MOCK_OFFERS = [
  */
 export default function SearchResultsScreen({ navigation }) {
   const [offers, setOffers] = useState([]);
+  const [travelerRatings, setTravelerRatings] = useState({}); // { userId: { rating, count } }
   const [filteredOffers, setFilteredOffers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,8 +78,9 @@ export default function SearchResultsScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [cityFilter, setCityFilter] = useState('');
+  const [userPhotoURL, setUserPhotoURL] = useState(null);
+  const [currentUser, setCurrentUser] = useState(auth.currentUser);
   const { language, toggleLanguage } = useLanguage();
-  const currentUser = auth.currentUser;
 
   // Translations
   const t = {
@@ -97,6 +99,7 @@ export default function SearchResultsScreen({ navigation }) {
       travelDate: 'Travel Date',
       available: 'available',
       viewDetails: 'View Details',
+      updated: 'Updated',
       noMatchesFound: 'No matches found',
       noOffersFound: 'No offers found',
       noMatchesText: 'No offers match your search. Try searching for a different city.',
@@ -125,6 +128,7 @@ export default function SearchResultsScreen({ navigation }) {
       travelDate: 'Date de Voyage',
       available: 'disponible',
       viewDetails: 'Voir Détails',
+      updated: 'Mis à jour',
       noMatchesFound: 'Aucun résultat trouvé',
       noOffersFound: 'Aucune offre trouvée',
       noMatchesText: 'Aucune offre ne correspond à votre recherche. Essayez une autre ville.',
@@ -207,11 +211,73 @@ export default function SearchResultsScreen({ navigation }) {
   }, [searchQuery, offers, cityFilter]);
 
   // Reload offers when screen comes into focus
+  // Listen to auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      if (!user) {
+        // User logged out, clear photo
+        setUserPhotoURL(null);
+      } else {
+        // User logged in, fetch their photo
+        fetchUserPhoto(user);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // Fetch user photo URL from Firestore
+  const fetchUserPhoto = async (user = currentUser) => {
+    if (!user) {
+      setUserPhotoURL(null);
+      return;
+    }
+    try {
+      const { doc, getDoc } = await import('firebase/firestore');
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserPhotoURL(data.photoURL || null);
+      }
+    } catch (error) {
+      console.error('Error fetching user photo:', error);
+    }
+  };
+
+
   useFocusEffect(
     React.useCallback(() => {
       loadOffers();
-    }, [filter])
+      fetchUserPhoto();
+    }, [filter, currentUser])
   );
+
+  // Fetch traveler ratings for all offers
+  useEffect(() => {
+    const fetchRatings = async () => {
+      const ratings = {};
+      const travelerIds = Array.from(new Set(offers.map(o => o.userId).filter(Boolean)));
+      for (const userId of travelerIds) {
+        try {
+          const reviewsQuery = query(
+            collection(db, 'reviews'),
+            where('travelerId', '==', userId)
+          );
+          const reviewsSnapshot = await getDocs(reviewsQuery);
+          const reviewsData = reviewsSnapshot.docs.map(doc => doc.data());
+          if (reviewsData.length > 0) {
+            const total = reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0);
+            ratings[userId] = {
+              rating: total / reviewsData.length,
+              count: reviewsData.length,
+            };
+          }
+        } catch (e) {}
+      }
+      setTravelerRatings(ratings);
+    };
+    if (offers.length > 0) fetchRatings();
+  }, [offers]);
 
   /**
    * Load offers from Firestore
@@ -252,12 +318,17 @@ export default function SearchResultsScreen({ navigation }) {
       querySnapshot.forEach((doc) => {
         const data = doc.data();
         const offerDate = data.date?.toDate ? data.date.toDate() : new Date(data.date);
-        
+
+        // Skip offers that have passed their travel date
+        if (offerDate < now) {
+          return; // Offer has expired, don't include it
+        }
+
         // Filter active status
         if (data.status === 'active') {
           // Apply filter based on selection
           let includeOffer = false;
-          
+
           if (filter === 'all') {
             includeOffer = true;
           } else if (filter === 'active') {
@@ -267,7 +338,7 @@ export default function SearchResultsScreen({ navigation }) {
             // Next Month - offers with travel date beyond 7 days
             includeOffer = offerDate > oneWeekFromNow;
           }
-          
+
           if (includeOffer) {
             offersData.push({
               id: doc.id,
@@ -336,7 +407,7 @@ export default function SearchResultsScreen({ navigation }) {
   // Get capacity bar color based on available capacity percentage
   const getCapacityColor = (available, total) => {
     const availablePercentage = (available / total) * 100;
-    
+
     if (availablePercentage >= 70) {
       return theme.colors.success; // Green (70-100%)
     } else if (availablePercentage >= 40) {
@@ -346,13 +417,31 @@ export default function SearchResultsScreen({ navigation }) {
     }
   };
 
+  // Check if offer was recently updated (within 24 hours)
+  const isRecentlyUpdated = (item) => {
+    if (!item.updatedAt || !item.createdAt) return false;
+
+    const updatedAt = item.updatedAt?.toDate ? item.updatedAt.toDate() : new Date(item.updatedAt);
+    const createdAt = item.createdAt?.toDate ? item.createdAt.toDate() : new Date(item.createdAt);
+
+    // Check if updated time is different from created time (meaning it was edited)
+    if (updatedAt.getTime() === createdAt.getTime()) return false;
+
+    // Check if updated within last 24 hours
+    const now = new Date();
+    const hoursSinceUpdate = (now - updatedAt) / (1000 * 60 * 60);
+    return hoursSinceUpdate < 24;
+  };
+
   /**
    * Render individual offer card
    */
   const renderOfferCard = ({ item }) => {
     const senderTotal = calculateSenderTotal(item.pricePerKg);
     const capacityPercentage = item.totalCapacity ? ((item.totalCapacity - item.availableCapacity) / item.totalCapacity) * 100 : 0;
-    
+    const showUpdateBadge = isRecentlyUpdated(item);
+    const travelerRating = travelerRatings[item.userId]?.rating;
+
     return (
       <Card
         onPress={() => navigation.navigate('OfferDetails', { offerId: item.id })}
@@ -373,38 +462,51 @@ export default function SearchResultsScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Divider */}
-        <View style={styles.divider} />
-
-        {/* Price and Date */}
-        <View style={styles.infoContainer}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>{text.pricePerKg}</Text>
-            <Text style={styles.priceText}>${item.pricePerKg.toFixed(2)}</Text>
+        {/* Price and Date Row */}
+        <View style={styles.priceAndDateRow}>
+          <View style={styles.priceContainer}>
+            <Text style={styles.priceLabel}>{text.pricePerKg}</Text>
+            <Text style={styles.priceValue}>${item.pricePerKg.toFixed(2)}/kg</Text>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>{text.travelDate}</Text>
-            <Text style={styles.dateText}>{formatDate(item.date)}</Text>
+          <View style={styles.dateContainer}>
+            <View style={styles.dateWithBadge}>
+              <Text style={styles.dateLabel}>{text.travelDate}</Text>
+              {showUpdateBadge && (
+                <View style={styles.updateBadge}>
+                  <RefreshIcon size={10} color={theme.colors.primary} />
+                  <Text style={styles.updateBadgeText}>{text.updated}</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.dateValue}>{formatDate(item.date)}</Text>
           </View>
         </View>
 
-        {/* Available capacity */}
+        {/* Divider */}
+        <View style={styles.divider} />
+
+        {/* Available capacity and traveler rating */}
         {item.availableCapacity && item.totalCapacity && (
           <View style={styles.capacitySection}>
-            <View style={styles.capacityInfo}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={styles.capacityLabel}>
                 📦 {item.availableCapacity}kg / {item.totalCapacity}kg {text.available}
               </Text>
+              {travelerRatings[item.userId]?.rating && (
+                <Text style={{ marginLeft: 8, color: '#FFB800', fontWeight: 'bold', fontSize: 15 }}>
+                  ★ {travelerRatings[item.userId].rating.toFixed(1)}
+                </Text>
+              )}
             </View>
             <View style={styles.capacityBar}>
-              <View 
+              <View
                 style={[
-                  styles.capacityFill, 
-                  { 
+                  styles.capacityFill,
+                  {
                     width: `${capacityPercentage}%`,
                     backgroundColor: getCapacityColor(item.availableCapacity, item.totalCapacity)
                   }
-                ]} 
+                ]}
               />
             </View>
           </View>
@@ -493,7 +595,11 @@ export default function SearchResultsScreen({ navigation }) {
                 }
               }}
             >
-              <ProfileIcon size={28} color={theme.colors.success} />
+              {userPhotoURL ? (
+                <Image source={{ uri: userPhotoURL }} style={{ width: 28, height: 28, borderRadius: 14 }} />
+              ) : (
+                <ProfileIcon size={28} color={theme.colors.success} />
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -538,14 +644,15 @@ export default function SearchResultsScreen({ navigation }) {
           <Text style={styles.sectionTitle}>
             {text.availableRoutes}
           </Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.filterIconButton}
             onPress={() => setFilterModalVisible(true)}
           >
-            <FilterIcon size={22} color={cityFilter ? theme.colors.success : theme.colors.primary} />
+            <FilterIcon size={22} color={cityFilter || filter !== 'all' ? theme.colors.success : theme.colors.primary} />
           </TouchableOpacity>
         </View>
-        <View style={styles.filterContainer}>
+        {/* Filter buttons hidden - will be used later */}
+        {/* <View style={styles.filterContainer}>
           <TouchableOpacity
             style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
             onPress={() => setFilter('all')}
@@ -570,7 +677,7 @@ export default function SearchResultsScreen({ navigation }) {
               {text.nextMonth}
             </Text>
           </TouchableOpacity>
-        </View>
+        </View> */}
       </View>
 
       {/* Offers List */}
@@ -610,39 +717,73 @@ export default function SearchResultsScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{text.filterByCity}</Text>
+              <Text style={styles.modalTitle}>Filter Offers</Text>
               <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
                 <CloseIcon size={20} />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalSubtitle}>
-              {text.filterSubtitle}
-            </Text>
-
-            <View style={styles.modalInputContainer}>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="e.g., New York, Paris, Brussels..."
-                placeholderTextColor={theme.colors.textLight}
-                value={cityFilter}
-                onChangeText={setCityFilter}
-                autoCapitalize="words"
-                autoCorrect={false}
-                autoFocus={true}
-              />
-              {cityFilter.length > 0 && (
-                <TouchableOpacity onPress={clearCityFilter} style={styles.modalClearButton}>
-                  <CloseIcon size={16} />
+            {/* Time Period Filter */}
+            <View style={styles.filterTimeSection}>
+              <Text style={styles.filterSectionLabel}>Time Period</Text>
+              <View style={styles.filterOptionsRow}>
+                <TouchableOpacity
+                  style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}
+                  onPress={() => setFilter('all')}
+                >
+                  <Text style={[styles.filterChipText, filter === 'all' && styles.filterChipTextActive]}>
+                    {text.allOffers}
+                  </Text>
                 </TouchableOpacity>
-              )}
+                <TouchableOpacity
+                  style={[styles.filterChip, filter === 'active' && styles.filterChipActive]}
+                  onPress={() => setFilter('active')}
+                >
+                  <Text style={[styles.filterChipText, filter === 'active' && styles.filterChipTextActive]}>
+                    {text.thisWeek}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterChip, filter === 'upcoming' && styles.filterChipActive]}
+                  onPress={() => setFilter('upcoming')}
+                >
+                  <Text style={[styles.filterChipText, filter === 'upcoming' && styles.filterChipTextActive]}>
+                    {text.nextMonth}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
-            {cityFilter.length > 0 && (
-              <Text style={styles.modalInfo}>
-                {text.showingFrom} <Text style={styles.modalInfoBold}>{cityFilter}</Text>
+            {/* City Filter */}
+            <View style={styles.filterCitySection}>
+              <Text style={styles.filterSectionLabel}>{text.filterByCity}</Text>
+              <Text style={styles.modalSubtitle}>
+                {text.filterSubtitle}
               </Text>
-            )}
+
+              <View style={styles.modalInputContainer}>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="e.g., New York, Paris, Brussels..."
+                  placeholderTextColor={theme.colors.textLight}
+                  value={cityFilter}
+                  onChangeText={setCityFilter}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+                {cityFilter.length > 0 && (
+                  <TouchableOpacity onPress={clearCityFilter} style={styles.modalClearButton}>
+                    <CloseIcon size={16} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {cityFilter.length > 0 && (
+                <Text style={styles.modalInfo}>
+                  {text.showingFrom} <Text style={styles.modalInfoBold}>{cityFilter}</Text>
+                </Text>
+              )}
+            </View>
 
             <View style={styles.modalButtons}>
               <Button
@@ -650,6 +791,7 @@ export default function SearchResultsScreen({ navigation }) {
                 variant="secondary"
                 onPress={() => {
                   clearCityFilter();
+                  setFilter('all');
                   setFilterModalVisible(false);
                 }}
                 style={styles.modalButton}
@@ -677,7 +819,7 @@ const styles = StyleSheet.create({
   // Hero Section
   heroSection: {
     backgroundColor: theme.colors.primary,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + theme.spacing.xl : theme.spacing.xxl,
+    paddingTop: theme.spacing.xxl,
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.lg,
     borderBottomLeftRadius: theme.borderRadius.xl,
@@ -734,10 +876,10 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
   },
   brandName: {
-    fontSize: 36,
-    fontWeight: '700',
+    fontSize: 32,
+    fontWeight: '800',
     color: theme.colors.background,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   tagline: {
     ...theme.typography.body,
@@ -749,9 +891,11 @@ const styles = StyleSheet.create({
   heroSubtitle: {
     ...theme.typography.bodySmall,
     color: theme.colors.background,
-    opacity: 0.85,
+    opacity: 0.90,
     paddingBottom: 15,
     textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 20,
   },
 
   // Search Section
@@ -811,7 +955,8 @@ const styles = StyleSheet.create({
   // Filter Section
   filterSection: {
     backgroundColor: theme.colors.background,
-    paddingVertical: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
     marginTop: theme.spacing.md,
   },
@@ -829,7 +974,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...theme.typography.h3,
     color: theme.colors.text,
-    fontSize: 18,
+    fontSize: 17,
+    fontWeight: '700',
   },
   filterIconButton: {
     padding: theme.spacing.xs,
@@ -874,7 +1020,7 @@ const styles = StyleSheet.create({
   },
   routeContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: theme.spacing.md,
   },
   locationContainer: {
@@ -884,21 +1030,92 @@ const styles = StyleSheet.create({
     ...theme.typography.caption,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.xs,
+    textTransform: 'uppercase',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   locationText: {
     ...theme.typography.h3,
     color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: '700',
   },
   arrowContainer: {
     paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.xs,
   },
   arrowIcon: {
-    fontSize: 24,
+    fontSize: 28,
+  },
+  priceAndDateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+  },
+  priceContainer: {
+    flex: 1,
+  },
+  priceLabel: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.xs,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  priceValue: {
+    ...theme.typography.body,
+    color: theme.colors.success,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  dateContainer: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  dateWithBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
+  },
+  dateLabel: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  updateBadge: {
+    backgroundColor: theme.colors.primary + '15',
+    paddingVertical: 2,
+    paddingHorizontal: theme.spacing.xs,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  updateBadgeText: {
+    ...theme.typography.caption,
+    color: theme.colors.primary,
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  dateValue: {
+    ...theme.typography.body,
+    color: theme.colors.text,
+    fontWeight: '600',
+    fontSize: 14,
   },
   divider: {
     height: 1,
     backgroundColor: theme.colors.border,
-    marginVertical: theme.spacing.md,
+    marginVertical: theme.spacing.sm,
+    opacity: 0.5,
   },
   infoContainer: {
     marginBottom: theme.spacing.md,
@@ -932,22 +1149,28 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   capacityInfo: {
-    marginBottom: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
+  },
+  capacityLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   capacityLabel: {
     ...theme.typography.bodySmall,
     color: theme.colors.text,
     fontWeight: '600',
+    fontSize: 13,
   },
   capacityBar: {
-    height: 6,
+    height: 8,
     backgroundColor: theme.colors.backgroundSecondary,
-    borderRadius: theme.borderRadius.sm,
+    borderRadius: theme.borderRadius.md,
     overflow: 'hidden',
   },
   capacityFill: {
     height: '100%',
-    borderRadius: theme.borderRadius.sm,
+    borderRadius: theme.borderRadius.md,
     // backgroundColor will be set dynamically based on capacity
   },
   capacityBadge: {
@@ -964,7 +1187,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   viewButton: {
-    marginTop: theme.spacing.sm,
+    marginTop: 0,
   },
   
   // Empty State
@@ -1043,11 +1266,52 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
+  filterTimeSection: {
+    marginBottom: theme.spacing.lg,
+  },
+  filterCitySection: {
+    marginBottom: theme.spacing.lg,
+  },
+  filterSectionLabel: {
+    ...theme.typography.h3,
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: theme.spacing.sm,
+  },
+  filterOptionsRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  filterChip: {
+    flex: 1,
+    paddingVertical: theme.spacing.sm + 2,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    backgroundColor: theme.colors.background,
+  },
+  filterChipActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  filterChipText: {
+    ...theme.typography.bodySmall,
+    color: theme.colors.textSecondary,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  filterChipTextActive: {
+    color: theme.colors.background,
+  },
   modalSubtitle: {
     ...theme.typography.body,
     color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.lg,
-    lineHeight: 22,
+    marginBottom: theme.spacing.md,
+    lineHeight: 20,
+    fontSize: 13,
   },
   modalInputContainer: {
     flexDirection: 'row',

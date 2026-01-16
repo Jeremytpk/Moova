@@ -1,3 +1,39 @@
+// Mail/Envelope Icon
+export const MailIcon = ({ size = 20, color = theme.colors.primary }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="5" width="18" height="14" rx="3" stroke={color} strokeWidth="2" fill="none" />
+    <Path d="M3 7l9 6 9-6" stroke={color} strokeWidth="2" fill="none" />
+  </Svg>
+);
+
+// Book/Books Icon
+export const BookIcon = ({ size = 20, color = theme.colors.primary }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke={color} strokeWidth="2" fill="none" />
+    <Path d="M20 17V6.5A2.5 2.5 0 0 0 17.5 4H6" stroke={color} strokeWidth="2" fill="none" />
+    <Path d="M4 6.5V19.5" stroke={color} strokeWidth="2" fill="none" />
+    <Path d="M6 4v13" stroke={color} strokeWidth="2" fill="none" />
+  </Svg>
+);
+
+// Lock Icon
+export const LockIcon = ({ size = 20, color = theme.colors.primary }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="5" y="11" width="14" height="8" rx="2" stroke={color} strokeWidth="2" fill="none" />
+    <Path d="M7 11V7a5 5 0 0 1 10 0v4" stroke={color} strokeWidth="2" fill="none" />
+    <Circle cx="12" cy="15" r="1.5" fill={color} />
+  </Svg>
+);
+
+// Sheet/Document Icon
+export const SheetIcon = ({ size = 20, color = theme.colors.primary }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="5" y="3" width="14" height="18" rx="2" stroke={color} strokeWidth="2" fill="none" />
+    <Path d="M9 7h6" stroke={color} strokeWidth="2" />
+    <Path d="M9 11h6" stroke={color} strokeWidth="2" />
+    <Path d="M9 15h4" stroke={color} strokeWidth="2" />
+  </Svg>
+);
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
@@ -405,6 +441,278 @@ export const ChatIcon = ({ size = 24, color = theme.colors.primary }) => (
       strokeLinejoin="round"
     />
   </Svg>
+);
+
+// Box/Package Small Icon (for capacity indicator)
+export const BoxIcon = ({ size = 16, color = theme.colors.text }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{
+      width: size * 0.85,
+      height: size * 0.85,
+      borderWidth: size * 0.12,
+      borderColor: color,
+      borderRadius: size * 0.12,
+      backgroundColor: 'transparent',
+    }}>
+      {/* Top flap line */}
+      <View style={{
+        position: 'absolute',
+        top: -size * 0.06,
+        left: -size * 0.06,
+        right: -size * 0.06,
+        height: size * 0.12,
+        backgroundColor: color,
+      }} />
+      {/* Vertical center line */}
+      <View style={{
+        position: 'absolute',
+        left: '50%',
+        marginLeft: -size * 0.06,
+        top: -size * 0.06,
+        bottom: -size * 0.06,
+        width: size * 0.12,
+        backgroundColor: color,
+      }} />
+    </View>
+  </View>
+);
+
+// Refresh/Update Icon (circular arrow)
+export const RefreshIcon = ({ size = 16, color = theme.colors.primary }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    {/* Circular arrow - outer arc */}
+    <View style={{
+      width: size * 0.8,
+      height: size * 0.8,
+      borderRadius: size * 0.4,
+      borderWidth: size * 0.15,
+      borderColor: color,
+      borderTopColor: 'transparent',
+      borderRightColor: 'transparent',
+      transform: [{ rotate: '45deg' }],
+    }} />
+    {/* Arrow head */}
+    <View style={{
+      position: 'absolute',
+      top: size * 0.05,
+      left: size * 0.35,
+      width: 0,
+      height: 0,
+      backgroundColor: 'transparent',
+      borderStyle: 'solid',
+      borderLeftWidth: size * 0.2,
+      borderRightWidth: size * 0.2,
+      borderBottomWidth: size * 0.25,
+      borderLeftColor: 'transparent',
+      borderRightColor: 'transparent',
+      borderBottomColor: color,
+      transform: [{ rotate: '-45deg' }],
+    }} />
+  </View>
+);
+
+// Edit Icon - Square with Pencil (universal edit symbol)
+export const EditIcon = ({ size = 20, color = theme.colors.primary }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    {/* Document/Square background */}
+    <View style={{
+      position: 'absolute',
+      width: size * 0.7,
+      height: size * 0.7,
+      borderWidth: size * 0.1,
+      borderColor: color,
+      borderRadius: size * 0.1,
+      backgroundColor: 'transparent',
+      bottom: size * 0.05,
+      left: size * 0.05,
+    }} />
+    {/* Pencil body (diagonal) */}
+    <View style={{
+      position: 'absolute',
+      width: size * 0.5,
+      height: size * 0.12,
+      backgroundColor: color,
+      borderRadius: size * 0.06,
+      top: size * 0.1,
+      right: size * 0.05,
+      transform: [{ rotate: '-45deg' }],
+    }} />
+    {/* Pencil tip */}
+    <View style={{
+      position: 'absolute',
+      width: 0,
+      height: 0,
+      backgroundColor: 'transparent',
+      borderStyle: 'solid',
+      borderLeftWidth: size * 0.08,
+      borderRightWidth: size * 0.08,
+      borderBottomWidth: size * 0.12,
+      borderLeftColor: 'transparent',
+      borderRightColor: 'transparent',
+      borderBottomColor: color,
+      top: size * 0.02,
+      right: size * 0.15,
+      transform: [{ rotate: '45deg' }],
+    }} />
+  </View>
+);
+
+// Delete/Trash Icon
+export const DeleteIcon = ({ size = 20, color = theme.colors.error }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    {/* Trash can body */}
+    <View style={{
+      position: 'absolute',
+      width: size * 0.6,
+      height: size * 0.65,
+      backgroundColor: 'transparent',
+      borderWidth: size * 0.1,
+      borderColor: color,
+      borderTopWidth: 0,
+      borderRadius: size * 0.08,
+      bottom: size * 0.05,
+    }}>
+      {/* Vertical lines inside */}
+      <View style={{
+        position: 'absolute',
+        left: '25%',
+        top: size * 0.08,
+        width: size * 0.08,
+        height: size * 0.35,
+        backgroundColor: color,
+        borderRadius: size * 0.04,
+      }} />
+      <View style={{
+        position: 'absolute',
+        right: '25%',
+        top: size * 0.08,
+        width: size * 0.08,
+        height: size * 0.35,
+        backgroundColor: color,
+        borderRadius: size * 0.04,
+      }} />
+    </View>
+    {/* Lid */}
+    <View style={{
+      position: 'absolute',
+      width: size * 0.7,
+      height: size * 0.1,
+      backgroundColor: color,
+      borderRadius: size * 0.05,
+      top: size * 0.22,
+    }} />
+    {/* Handle */}
+    <View style={{
+      position: 'absolute',
+      width: size * 0.3,
+      height: size * 0.08,
+      backgroundColor: 'transparent',
+      borderWidth: size * 0.08,
+      borderColor: color,
+      borderBottomWidth: 0,
+      borderTopLeftRadius: size * 0.15,
+      borderTopRightRadius: size * 0.15,
+      top: size * 0.05,
+    }} />
+  </View>
+);
+
+// Dollar Bill Icon
+export const DollarBillIcon = ({ size = 16, color = theme.colors.success }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    {/* Bill rectangle */}
+    <View style={{
+      width: size * 0.95,
+      height: size * 0.65,
+      borderRadius: size * 0.08,
+      borderWidth: size * 0.1,
+      borderColor: color,
+      backgroundColor: 'transparent',
+      justifyContent: 'center',
+      alignItems: 'center',
+      position: 'relative',
+    }}>
+      {/* Dollar sign $ in center */}
+      <View style={{
+        width: size * 0.35,
+        height: size * 0.45,
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}>
+        {/* Vertical line of $ */}
+        <View style={{
+          position: 'absolute',
+          width: size * 0.06,
+          height: size * 0.45,
+          backgroundColor: color,
+          borderRadius: size * 0.03,
+        }} />
+        {/* Top curve of S */}
+        <View style={{
+          position: 'absolute',
+          width: size * 0.25,
+          height: size * 0.15,
+          borderWidth: size * 0.06,
+          borderColor: color,
+          borderBottomColor: 'transparent',
+          borderLeftColor: 'transparent',
+          borderTopRightRadius: size * 0.12,
+          top: 0,
+          left: size * 0.05,
+        }} />
+        {/* Bottom curve of S */}
+        <View style={{
+          position: 'absolute',
+          width: size * 0.25,
+          height: size * 0.15,
+          borderWidth: size * 0.06,
+          borderColor: color,
+          borderTopColor: 'transparent',
+          borderRightColor: 'transparent',
+          borderBottomLeftRadius: size * 0.12,
+          bottom: 0,
+          right: size * 0.05,
+        }} />
+      </View>
+      {/* Decorative circles on corners */}
+      <View style={{
+        position: 'absolute',
+        top: -size * 0.08,
+        left: -size * 0.08,
+        width: size * 0.15,
+        height: size * 0.15,
+        borderRadius: size * 0.075,
+        backgroundColor: color,
+      }} />
+      <View style={{
+        position: 'absolute',
+        top: -size * 0.08,
+        right: -size * 0.08,
+        width: size * 0.15,
+        height: size * 0.15,
+        borderRadius: size * 0.075,
+        backgroundColor: color,
+      }} />
+      <View style={{
+        position: 'absolute',
+        bottom: -size * 0.08,
+        left: -size * 0.08,
+        width: size * 0.15,
+        height: size * 0.15,
+        borderRadius: size * 0.075,
+        backgroundColor: color,
+      }} />
+      <View style={{
+        position: 'absolute',
+        bottom: -size * 0.08,
+        right: -size * 0.08,
+        width: size * 0.15,
+        height: size * 0.15,
+        borderRadius: size * 0.075,
+        backgroundColor: color,
+      }} />
+    </View>
+  </View>
 );
 
 const styles = StyleSheet.create({

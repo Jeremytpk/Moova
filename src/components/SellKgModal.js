@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import theme from '../theme';
 import { useLanguage } from '../contexts/LanguageContext';
+import { calculateFeeBreakdown, formatCurrency } from '../utils/feeCalculations';
 
 /**
  * SellKgModal
@@ -36,11 +37,15 @@ export default function SellKgModal({
     setSoldKg(value);
     const kg = parseFloat(value);
     if (!isNaN(kg) && kg > 0 && offer?.pricePerKg) {
-      const calculatedAmount = (kg * offer.pricePerKg).toFixed(2);
-      setPaymentAmount(calculatedAmount);
+      // Calculate fee breakdown
+      const feeBreakdown = calculateFeeBreakdown(kg, offer.pricePerKg);
+
+      // Sender pays total (base price + service fee)
+      setPaymentAmount(feeBreakdown.senderTotal.toFixed(2));
+
       if (!isChat) {
-        // For OfferDetailsScreen, set sale price to calculated amount
-        setSalePrice(calculatedAmount);
+        // For OfferDetailsScreen, traveler receives net earnings (87% of base price)
+        setSalePrice(feeBreakdown.travelerEarnings.toFixed(2));
       }
     } else {
       setPaymentAmount('');
@@ -220,19 +225,38 @@ export default function SellKgModal({
               </View>
             )}
 
-            {/* Summary */}
-            {soldKg && !isNaN(parseFloat(soldKg)) && (
+            {/* Summary with Fee Breakdown */}
+            {soldKg && !isNaN(parseFloat(soldKg)) && offer?.pricePerKg && (
               <View style={styles.summaryCard}>
-                {isChat && paymentAmount && !isNaN(parseFloat(paymentAmount)) && (
-                  <Text style={styles.summaryText}>
-                    {parseFloat(soldKg)}kg → ${parseFloat(paymentAmount).toFixed(2)}
-                  </Text>
-                )}
-                {!isChat && salePrice && !isNaN(parseFloat(salePrice)) && (
-                  <Text style={styles.summaryText}>
-                    {parseFloat(soldKg)}kg → ${parseFloat(salePrice).toFixed(2)}
-                  </Text>
-                )}
+                {(() => {
+                  const kg = parseFloat(soldKg);
+                  const feeBreakdown = calculateFeeBreakdown(kg, offer.pricePerKg);
+
+                  return (
+                    <>
+                      {isChat && (
+                        <>
+                          <Text style={styles.summaryTitle}>{text.senderPays}</Text>
+                          <Text style={styles.summaryAmount}>{formatCurrency(feeBreakdown.senderTotal)}</Text>
+                          <View style={styles.summaryBreakdown}>
+                            <Text style={styles.summaryDetail}>Base: {formatCurrency(feeBreakdown.basePrice)}</Text>
+                            <Text style={styles.summaryDetail}>Fee: {formatCurrency(feeBreakdown.serviceFee)}</Text>
+                          </View>
+                          <View style={styles.summaryDivider} />
+                          <Text style={styles.summaryEarnings}>{text.youReceive} {formatCurrency(feeBreakdown.travelerEarnings)}</Text>
+                          <Text style={styles.summarySmall}>
+                            60% now ({formatCurrency(feeBreakdown.travelerInitialPayment)}) + 40% on delivery ({formatCurrency(feeBreakdown.travelerFinalPayment)})
+                          </Text>
+                        </>
+                      )}
+                      {!isChat && salePrice && !isNaN(parseFloat(salePrice)) && (
+                        <Text style={styles.summaryText}>
+                          {kg}kg → {formatCurrency(parseFloat(salePrice))}
+                        </Text>
+                      )}
+                    </>
+                  );
+                })()}
               </View>
             )}
 
@@ -326,6 +350,50 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     fontSize: 16,
+  },
+  summaryTitle: {
+    ...theme.typography.body,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  summaryAmount: {
+    ...theme.typography.h2,
+    color: theme.colors.success,
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  summaryBreakdown: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.xs,
+  },
+  summaryDetail: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border,
+    marginVertical: theme.spacing.sm,
+  },
+  summaryEarnings: {
+    ...theme.typography.body,
+    color: theme.colors.success,
+    fontWeight: '700',
+    textAlign: 'center',
+    fontSize: 16,
+  },
+  summarySmall: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+    fontSize: 10,
+    textAlign: 'center',
+    marginTop: theme.spacing.xs,
   },
   buttonRow: {
     flexDirection: 'row',

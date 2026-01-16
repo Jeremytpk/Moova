@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Modal, TextInput, TouchableOpacity, Alert, FlatList } from 'react-native';
-import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { View, Text, StyleSheet, ScrollView, Modal, TextInput, TouchableOpacity, Alert, FlatList, Image } from 'react-native';
+import { doc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../config/firebaseConfig';
 import theme from '../theme';
 import Button from '../components/Button';
 import Loading from '../components/Loading';
+import { ProfileIcon } from '../components/Icons';
 import { useLanguage } from '../contexts/LanguageContext';
 
 /**
@@ -21,6 +22,8 @@ export default function OfferDetailsScreen({ route, navigation }) {
   const [soldKg, setSoldKg] = useState('');
   const [salePrice, setSalePrice] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [travelerRating, setTravelerRating] = useState(null);
+  const [travelerReviewCount, setTravelerReviewCount] = useState(0);
   const currentUser = auth.currentUser;
   const { language } = useLanguage();
 
@@ -80,6 +83,10 @@ export default function OfferDetailsScreen({ route, navigation }) {
       yesCancel: 'Yes, Cancel',
       kgRestored: 'kg restored to available capacity.',
       failedToCancel: 'Failed to cancel sale. Please try again.',
+      rating: 'Rating',
+      reviews: 'reviews',
+      viewReviews: 'View Reviews',
+      noRating: 'No ratings yet',
     },
     fr: {
       offerNotFound: 'Offre non trouvée',
@@ -135,6 +142,10 @@ export default function OfferDetailsScreen({ route, navigation }) {
       yesCancel: 'Oui, Annuler',
       kgRestored: 'kg restaurés à la capacité disponible.',
       failedToCancel: 'Échec de l\'annulation de la vente. Veuillez réessayer.',
+      rating: 'Note',
+      reviews: 'avis',
+      viewReviews: 'Voir les Avis',
+      noRating: 'Pas encore de notes',
     },
   };
 
@@ -144,28 +155,47 @@ export default function OfferDetailsScreen({ route, navigation }) {
     loadOfferDetails();
   }, [offerId]);
 
+  // Fetch offer details and traveler info
   const loadOfferDetails = async () => {
     try {
       setLoading(true);
       setError(null);
       const offerDoc = await getDoc(doc(db, 'offers', offerId));
-      
       if (offerDoc.exists()) {
         const offerData = { id: offerDoc.id, ...offerDoc.data() };
-        
-        // Fetch the traveler's username
+        // Fetch the traveler's username and photo
         if (offerData.userId) {
           try {
             const userDoc = await getDoc(doc(db, 'users', offerData.userId));
             if (userDoc.exists()) {
               const userData = userDoc.data();
               offerData.userUsername = userData.username || userData.name || userData.email;
+              offerData.userPhotoURL = userData.photoURL || null;
             }
           } catch (error) {
             console.log('Error fetching user details:', error);
           }
+          // Fetch traveler's reviews for rating and count
+          try {
+            const reviewsQuery = query(
+              collection(db, 'reviews'),
+              where('travelerId', '==', offerData.userId)
+            );
+            const reviewsSnapshot = await getDocs(reviewsQuery);
+            const reviewsData = reviewsSnapshot.docs.map(doc => doc.data());
+            if (reviewsData.length > 0) {
+              const total = reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0);
+              setTravelerRating(total / reviewsData.length);
+              setTravelerReviewCount(reviewsData.length);
+            } else {
+              setTravelerRating(null);
+              setTravelerReviewCount(0);
+            }
+          } catch (error) {
+            setTravelerRating(null);
+            setTravelerReviewCount(0);
+          }
         }
-        
         setOffer(offerData);
       } else {
         setError(text.offerNotFound);
@@ -326,6 +356,25 @@ export default function OfferDetailsScreen({ route, navigation }) {
     });
   };
 
+  // Render star rating
+  const renderStars = (rating) => {
+    if (!rating) return null;
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+
+    for (let i = 0; i < 5; i++) {
+      if (i < fullStars) {
+        stars.push(<Text key={i} style={styles.star}>★</Text>);
+      } else if (i === fullStars && hasHalfStar) {
+        stars.push(<Text key={i} style={styles.star}>⭐</Text>);
+      } else {
+        stars.push(<Text key={i} style={styles.starEmpty}>☆</Text>);
+      }
+    }
+    return stars;
+  };
+
   // Get capacity bar color based on available capacity percentage
   const getCapacityColor = (available, total) => {
     const availablePercentage = (available / total) * 100;
@@ -424,7 +473,46 @@ export default function OfferDetailsScreen({ route, navigation }) {
         {/* Traveler Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{text.traveler}</Text>
-          <Text style={styles.travelerText}>{offer.userUsername || offer.userEmail || 'Traveler'}</Text>
+          <View style={styles.travelerContainer}>
+            <View style={styles.travelerAvatarContainer}>
+              {offer.userPhotoURL ? (
+                <Image source={{ uri: offer.userPhotoURL }} style={styles.travelerAvatar} />
+              ) : (
+                <View style={styles.travelerAvatarPlaceholder}>
+                  <ProfileIcon size={40} color={theme.colors.primary} />
+                </View>
+              )}
+            </View>
+            <View style={styles.travelerInfo}>
+              <Text style={styles.travelerName}>{offer.userUsername || offer.userEmail || 'Traveler'}</Text>
+              {travelerRating ? (
+                <View style={styles.ratingContainer}>
+                  <View style={styles.starsContainer}>
+                    {renderStars(travelerRating)}
+                  </View>
+                  <Text style={styles.ratingText}>
+                    {travelerRating.toFixed(1)} ({travelerReviewCount} {text.reviews})
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.noRatingText}>{text.noRating}</Text>
+              )}
+            </View>
+          </View>
+          {!isOfferOwner && (
+            <TouchableOpacity
+              style={styles.viewReviewsButton}
+              onPress={() => {
+                // Navigate to reviews screen (to be implemented)
+                navigation.navigate('TravelerReviews', {
+                  userId: offer.userId,
+                  userName: offer.userUsername || 'Traveler',
+                });
+              }}
+            >
+              <Text style={styles.viewReviewsButtonText}>{text.viewReviews}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Status Badge */}
@@ -628,9 +716,78 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
     // backgroundColor removed - will be set dynamically
   },
-  travelerText: {
+  travelerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  travelerAvatarContainer: {
+    marginRight: theme.spacing.md,
+  },
+  travelerAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  travelerAvatarPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: theme.colors.backgroundSecondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  travelerInfo: {
+    flex: 1,
+  },
+  travelerName: {
     ...theme.typography.body,
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: theme.spacing.xs,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+  },
+  star: {
+    color: '#FFB800',
+    fontSize: 16,
+  },
+  starEmpty: {
+    color: theme.colors.border,
+    fontSize: 16,
+  },
+  ratingText: {
+    ...theme.typography.caption,
     color: theme.colors.textSecondary,
+    fontSize: 12,
+  },
+  noRatingText: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  viewReviewsButton: {
+    backgroundColor: theme.colors.backgroundSecondary,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  viewReviewsButtonText: {
+    ...theme.typography.button,
+    color: theme.colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
   },
   statusBadge: {
     paddingVertical: theme.spacing.sm,
