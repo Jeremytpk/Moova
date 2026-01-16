@@ -14,6 +14,8 @@ module.exports = async function(env, argv) {
   config.resolve.alias = {
     ...(config.resolve.alias || {}),
     'react-native$': 'react-native-web',
+    // Map React Native internal utilities to react-native-web equivalents
+    'react-native/Libraries/Utilities/Platform': 'react-native-web/dist/exports/Platform',
   };
 
   return config;
