@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Modal, Image } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Modal, Image, TextInput } from 'react-native';
 import { collection, addDoc, Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../config/firebaseConfig';
 import theme from '../theme';
@@ -9,6 +8,12 @@ import Button from '../components/Button';
 import Loading from '../components/Loading';
 import TravelerRequiredModal from '../components/TravelerRequiredModal';
 import { useLanguage } from '../contexts/LanguageContext';
+
+// Conditionally import DateTimePicker only on native platforms
+let DateTimePicker;
+if (Platform.OS !== 'web') {
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+}
 
 /**
  * CreateOfferScreen
@@ -366,7 +371,7 @@ export default function CreateOfferScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
 
-        {showDatePicker && (
+        {showDatePicker && Platform.OS !== 'web' && (
           <DateTimePicker
             value={date}
             mode="date"
@@ -374,6 +379,30 @@ export default function CreateOfferScreen({ navigation, route }) {
             onChange={handleDateChange}
             minimumDate={new Date()}
           />
+        )}
+
+        {showDatePicker && Platform.OS === 'web' && (
+          <View style={styles.webDateInputContainer}>
+            <input
+              type="date"
+              value={date.toISOString().split('T')[0]}
+              min={new Date().toISOString().split('T')[0]}
+              onChange={(e) => {
+                const selectedDate = new Date(e.target.value);
+                setDate(selectedDate);
+                setShowDatePicker(false);
+              }}
+              style={{
+                width: '100%',
+                padding: 12,
+                fontSize: 16,
+                borderRadius: 8,
+                border: `1px solid ${theme.colors.border}`,
+                backgroundColor: theme.colors.background,
+                color: theme.colors.text,
+              }}
+            />
+          </View>
         )}
 
         <Input
@@ -597,5 +626,8 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     width: '100%',
+  },
+  webDateInputContainer: {
+    marginVertical: theme.spacing.md,
   },
 });

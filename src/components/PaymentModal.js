@@ -9,11 +9,19 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
-import { CardField, useStripe } from '@stripe/stripe-react-native';
 import theme from '../theme';
 import { useLanguage } from '../contexts/LanguageContext';
 import { calculateFeeBreakdown, formatCurrency, getServiceFeeDescription } from '../utils/feeCalculations';
+
+// Conditionally import Stripe only on native platforms
+let CardField, useStripe;
+if (Platform.OS !== 'web') {
+  const StripeReactNative = require('@stripe/stripe-react-native');
+  CardField = StripeReactNative.CardField;
+  useStripe = StripeReactNative.useStripe;
+}
 
 /**
  * PaymentModal
@@ -26,11 +34,38 @@ export default function PaymentModal({
   onProcessPayment,
 }) {
   const { language } = useLanguage();
-  const { confirmPayment } = useStripe();
+  const stripe = Platform.OS !== 'web' ? useStripe() : null;
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [cardComplete, setCardComplete] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Show message on web platform
+  if (Platform.OS === 'web') {
+    return (
+      <Modal
+        visible={visible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={onClose}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Payment Not Available</Text>
+            <Text style={styles.webNotice}>
+              Payment processing is only available on mobile devices. Please use the iOS or Android app to complete your payment.
+            </Text>
+            <TouchableOpacity
+              style={[styles.button, styles.submitButton]}
+              onPress={onClose}
+            >
+              <Text style={styles.submitButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   // Calculate fee breakdown
   const feeBreakdown = paymentRequest?.kg && paymentRequest?.pricePerKg
@@ -119,7 +154,7 @@ export default function PaymentModal({
 
     try {
       // Confirm payment with Stripe
-      const { error, paymentIntent } = await confirmPayment(paymentRequest.clientSecret, {
+      const { error, paymentIntent } = await stripe.confirmPayment(paymentRequest.clientSecret, {
         paymentMethodType: 'Card',
         paymentMethodData: {
           billingDetails: {
@@ -462,5 +497,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     opacity: 0.3,
     marginVertical: theme.spacing.sm,
+  },
+  webNotice: {
+    ...theme.typography.body,
+    color: theme.colors.text,
+    textAlign: 'center',
+    marginVertical: theme.spacing.lg,
+    lineHeight: 22,
   },
 });
