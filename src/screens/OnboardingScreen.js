@@ -7,6 +7,7 @@ import {
   Dimensions,
   TouchableOpacity,
   Animated,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import theme from '../theme';
@@ -138,7 +139,13 @@ export default function OnboardingScreen({ navigation }) {
     const description = language === 'fr' ? item.descriptionFR : item.descriptionEN;
 
     return (
-      <View style={[styles.slide, { width: SCREEN_WIDTH }]}>
+      <View
+        style={[
+          styles.slide,
+          { width: SCREEN_WIDTH },
+          Platform.OS === 'web' && { scrollSnapAlign: 'start' }
+        ]}
+      >
         <View style={[styles.iconContainer, { backgroundColor: item.color + '20' }]}>
           <Text style={styles.icon}>{item.icon}</Text>
         </View>
@@ -202,6 +209,11 @@ export default function OnboardingScreen({ navigation }) {
         scrollEventThrottle={32}
         onViewableItemsChanged={viewableItemsChanged}
         viewabilityConfig={viewConfig}
+        snapToInterval={Platform.OS === 'web' ? SCREEN_WIDTH : undefined}
+        decelerationRate={Platform.OS === 'web' ? 'fast' : 'normal'}
+        snapToAlignment="center"
+        style={Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'scroll' } : undefined}
+        contentContainerStyle={Platform.OS === 'web' ? { display: 'flex' } : undefined}
       />
 
       {/* Footer */}
