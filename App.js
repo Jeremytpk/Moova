@@ -424,6 +424,13 @@ export default function App() {
 
   const checkOnboardingStatus = async () => {
     try {
+      // Skip onboarding on web - only show on mobile apps
+      if (Platform.OS === 'web') {
+        setShowOnboarding(false);
+        setLoading(false);
+        return;
+      }
+
       // Check if user has completed onboarding
       const onboardingComplete = await AsyncStorage.getItem('@onboarding_complete');
 
