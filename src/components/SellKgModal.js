@@ -261,15 +261,7 @@ export default function SellKgModal({
             )}
 
             {/* Buttons */}
-            <View style={styles.buttonRow}>
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
-                onPress={onClose}
-                disabled={loading}
-              >
-                <Text style={styles.cancelButtonText}>{text.cancel}</Text>
-              </TouchableOpacity>
-
+            <View style={styles.buttonColumn}>
               <TouchableOpacity
                 style={[styles.button, styles.submitButton, loading && styles.buttonDisabled]}
                 onPress={handleSubmit}
@@ -278,6 +270,14 @@ export default function SellKgModal({
                 <Text style={styles.submitButtonText}>
                   {isChat ? text.sendRequest : text.addSale}
                 </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.button, styles.cancelButton]}
+                onPress={onClose}
+                disabled={loading}
+              >
+                <Text style={styles.cancelButtonText}>{text.cancel}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -395,12 +395,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: theme.spacing.xs,
   },
-  buttonRow: {
-    flexDirection: 'row',
+  buttonColumn: {
+    flexDirection: 'column',
     gap: theme.spacing.md,
+    marginTop: theme.spacing.md,
   },
   button: {
-    flex: 1,
+    width: '100%',
     paddingVertical: theme.spacing.md,
     borderRadius: theme.borderRadius.lg,
     alignItems: 'center',
