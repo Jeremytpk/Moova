@@ -250,7 +250,6 @@ export default function SearchResultsScreen({ navigation }) {
   useFocusEffect(
     React.useCallback(() => {
       loadOffers();
-      fetchUserPhoto();
     }, [filter, currentUser])
   );
 
