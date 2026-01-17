@@ -15,12 +15,17 @@ import theme from '../theme';
 import { useLanguage } from '../contexts/LanguageContext';
 import { calculateFeeBreakdown, formatCurrency, getServiceFeeDescription } from '../utils/feeCalculations';
 
-// Conditionally import Stripe only on native platforms
-let CardField, useStripe;
+// Conditionally import Stripe based on platform
+let CardField, useStripe, CardElement, useElements;
 if (Platform.OS !== 'web') {
   const StripeReactNative = require('@stripe/stripe-react-native');
   CardField = StripeReactNative.CardField;
   useStripe = StripeReactNative.useStripe;
+} else {
+  const StripeReactStripeJs = require('@stripe/react-stripe-js');
+  CardElement = StripeReactStripeJs.CardElement;
+  useElements = StripeReactStripeJs.useElements;
+  useStripe = StripeReactStripeJs.useStripe;
 }
 
 /**
@@ -34,38 +39,12 @@ export default function PaymentModal({
   onProcessPayment,
 }) {
   const { language } = useLanguage();
-  const stripe = Platform.OS !== 'web' ? useStripe() : null;
+  const stripe = useStripe();
+  const elements = Platform.OS === 'web' ? useElements() : null;
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [cardComplete, setCardComplete] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  // Show message on web platform
-  if (Platform.OS === 'web') {
-    return (
-      <Modal
-        visible={visible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={onClose}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Payment Not Available</Text>
-            <Text style={styles.webNotice}>
-              Payment processing is only available on mobile devices. Please use the iOS or Android app to complete your payment.
-            </Text>
-            <TouchableOpacity
-              style={[styles.button, styles.submitButton]}
-              onPress={onClose}
-            >
-              <Text style={styles.submitButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    );
-  }
 
   // Calculate fee breakdown
   const feeBreakdown = paymentRequest?.kg && paymentRequest?.pricePerKg
@@ -153,16 +132,40 @@ export default function PaymentModal({
     setLoading(true);
 
     try {
-      // Confirm payment with Stripe
-      const { error, paymentIntent } = await stripe.confirmPayment(paymentRequest.clientSecret, {
-        paymentMethodType: 'Card',
-        paymentMethodData: {
-          billingDetails: {
-            name: fullName,
-            email: email,
+      let paymentIntent;
+      let error;
+
+      if (Platform.OS === 'web') {
+        // Web: Use Stripe.js confirmCardPayment
+        const cardElement = elements.getElement(CardElement);
+
+        const result = await stripe.confirmCardPayment(paymentRequest.clientSecret, {
+          payment_method: {
+            card: cardElement,
+            billing_details: {
+              name: fullName,
+              email: email,
+            },
           },
-        },
-      });
+        });
+
+        error = result.error;
+        paymentIntent = result.paymentIntent;
+      } else {
+        // Native: Use Stripe React Native confirmPayment
+        const result = await stripe.confirmPayment(paymentRequest.clientSecret, {
+          paymentMethodType: 'Card',
+          paymentMethodData: {
+            billingDetails: {
+              name: fullName,
+              email: email,
+            },
+          },
+        });
+
+        error = result.error;
+        paymentIntent = result.paymentIntent;
+      }
 
       if (error) {
         console.error('Payment confirmation error:', error);
@@ -171,7 +174,7 @@ export default function PaymentModal({
         return;
       }
 
-      if (paymentIntent && paymentIntent.status === 'Succeeded') {
+      if (paymentIntent && paymentIntent.status === 'succeeded') {
         // Payment successful - call the backend to update the database
         await onProcessPayment({
           fullName,
@@ -274,23 +277,47 @@ export default function PaymentModal({
             {/* Card Information */}
             <Text style={styles.sectionTitle}>{text.cardInfo}</Text>
 
-            <View style={styles.cardFieldContainer}>
-              <CardField
-                postalCodeEnabled={false}
-                placeholders={{
-                  number: '4242 4242 4242 4242',
-                }}
-                cardStyle={{
-                  backgroundColor: '#FFFFFF',
-                  textColor: theme.colors.text,
-                  placeholderColor: theme.colors.textLight,
-                }}
-                style={styles.cardField}
-                onCardChange={(cardDetails) => {
-                  setCardComplete(cardDetails.complete);
-                }}
-              />
-            </View>
+            {Platform.OS === 'web' ? (
+              <View style={styles.cardFieldContainer}>
+                <CardElement
+                  options={{
+                    style: {
+                      base: {
+                        fontSize: '16px',
+                        color: theme.colors.text,
+                        '::placeholder': {
+                          color: theme.colors.textLight,
+                        },
+                      },
+                      invalid: {
+                        color: '#fa755a',
+                      },
+                    },
+                  }}
+                  onChange={(event) => {
+                    setCardComplete(event.complete);
+                  }}
+                />
+              </View>
+            ) : (
+              <View style={styles.cardFieldContainer}>
+                <CardField
+                  postalCodeEnabled={false}
+                  placeholders={{
+                    number: '4242 4242 4242 4242',
+                  }}
+                  cardStyle={{
+                    backgroundColor: '#FFFFFF',
+                    textColor: theme.colors.text,
+                    placeholderColor: theme.colors.textLight,
+                  }}
+                  style={styles.cardField}
+                  onCardChange={(cardDetails) => {
+                    setCardComplete(cardDetails.complete);
+                  }}
+                />
+              </View>
+            )}
 
             <Text style={styles.testCardHint}>
               Test card: 4242 4242 4242 4242 | Any future date | Any 3 digits
@@ -444,6 +471,14 @@ const styles = StyleSheet.create({
   },
   cardFieldContainer: {
     marginBottom: theme.spacing.md,
+    ...(Platform.OS === 'web' ? {
+      backgroundColor: theme.colors.backgroundSecondary,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      minHeight: 50,
+    } : {}),
   },
   cardField: {
     width: '100%',

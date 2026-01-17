@@ -8,7 +8,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { TouchableOpacity, View, StyleSheet, Platform } from 'react-native';
-import { StripeProvider } from '@stripe/stripe-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth } from './src/config/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -16,8 +15,21 @@ import theme from './src/theme';
 import { ProfileIcon, SearchIcon, PackageIcon, ShipmentIcon, ChatIcon } from './src/components/Icons';
 import { LanguageProvider, useLanguage } from './src/contexts/LanguageContext';
 
+// Conditionally import Stripe providers based on platform
+let StripeProvider;
+let Elements, loadStripe;
+if (Platform.OS !== 'web') {
+  StripeProvider = require('@stripe/stripe-react-native').StripeProvider;
+} else {
+  Elements = require('@stripe/react-stripe-js').Elements;
+  loadStripe = require('@stripe/stripe-js').loadStripe;
+}
+
 // Stripe Publishable Key - Live Mode
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_51SpgpJPoKtwC5G8hPwrhXSAKBUemKSO5pG8iH9QwJMzxDakddHeZXZLouBdijEJNIehlzMSNvJSwmMheGyuwTaIl001Pxs2qIp';
+
+// Initialize Stripe for web
+const stripePromise = Platform.OS === 'web' ? loadStripe(STRIPE_PUBLISHABLE_KEY) : null;
 
 // Screens
 import SearchResultsScreen from './src/screens/SearchResultsScreen';
@@ -430,10 +442,18 @@ export default function App() {
     return <LoadingScreen />;
   }
 
+  // Wrapper component that conditionally adds Stripe providers based on platform
+  const AppContent = ({ children }) => {
+    if (Platform.OS === 'web') {
+      return <Elements stripe={stripePromise}>{children}</Elements>;
+    }
+    return <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>{children}</StripeProvider>;
+  };
+
   // Show language selection and onboarding if first launch
   if (showOnboarding) {
     return (
-      <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
+      <AppContent>
         <LanguageProvider>
           <StatusBar style="auto" />
           <NavigationContainer>
@@ -456,16 +476,16 @@ export default function App() {
             </Stack.Navigator>
           </NavigationContainer>
         </LanguageProvider>
-      </StripeProvider>
+      </AppContent>
     );
   }
 
   return (
-    <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
+    <AppContent>
       <LanguageProvider>
         <StatusBar style="auto" />
         <AppNavigator />
       </LanguageProvider>
-    </StripeProvider>
+    </AppContent>
   );
 }

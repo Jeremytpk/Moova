@@ -17,6 +17,8 @@
     "@react-navigation/bottom-tabs": "^6.5.11",
     "@react-navigation/native": "^6.1.9",
     "@react-navigation/native-stack": "^6.9.17",
+    "@stripe/react-stripe-js": "^5.4.1",
+    "@stripe/stripe-js": "^8.6.1",
     "@stripe/stripe-react-native": "^0.35.1",
     "crypto-browserify": "^3.12.1",
     "expo": "~50.0.0",

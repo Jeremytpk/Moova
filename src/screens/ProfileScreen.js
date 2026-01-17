@@ -21,6 +21,26 @@ export default function ProfileScreen({ navigation }) {
   const [isTraveler, setIsTraveler] = useState(false);
   const [travelerPayment, setTravelerPayment] = useState(null);
   const [photoURL, setPhotoURL] = useState(null);
+  // Listen for real-time updates to user profile (photoURL, etc)
+  useEffect(() => {
+    if (!user) return;
+    let unsubscribe;
+    (async () => {
+      const { doc, onSnapshot, getFirestore } = await import('firebase/firestore');
+      const db = getFirestore();
+      const userDocRef = doc(db, 'users', user.uid);
+      unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.photoURL) setPhotoURL(data.photoURL);
+          if (data.username) setUsername(data.username);
+          setIsTraveler(data.isTraveler || false);
+          setTravelerPayment(data.travelerPayment || null);
+        }
+      });
+    })();
+    return () => { if (unsubscribe) unsubscribe(); };
+  }, [user]);
   const { language, toggleLanguage } = useLanguage();
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);

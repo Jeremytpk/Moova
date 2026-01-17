@@ -226,23 +226,25 @@ export default function SearchResultsScreen({ navigation }) {
     return unsubscribe;
   }, []);
 
-  // Fetch user photo URL from Firestore
-  const fetchUserPhoto = async (user = currentUser) => {
-    if (!user) {
+  // Listen for real-time updates to user photoURL
+  useEffect(() => {
+    if (!currentUser) {
       setUserPhotoURL(null);
       return;
     }
-    try {
-      const { doc, getDoc } = await import('firebase/firestore');
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        setUserPhotoURL(data.photoURL || null);
-      }
-    } catch (error) {
-      console.error('Error fetching user photo:', error);
-    }
-  };
+    let unsubscribe;
+    (async () => {
+      const { doc, onSnapshot } = await import('firebase/firestore');
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setUserPhotoURL(data.photoURL || null);
+        }
+      });
+    })();
+    return () => { if (unsubscribe) unsubscribe(); };
+  }, [currentUser]);
 
 
   useFocusEffect(
