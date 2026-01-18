@@ -209,10 +209,10 @@ export default function OfferDetailsScreen({ route, navigation }) {
   };
 
   const handleContactTraveler = () => {
-    if (!currentUser) {
-      navigation.navigate('AuthFlow');
-      return;
-    }
+
+    // Use requireAuthOrShowModal for auth check
+    const { requireAuthOrShowModal } = require('./ProfileScreen');
+    if (!requireAuthOrShowModal(currentUser, true, navigation, 'Chat', () => {})) return;
 
     if (!offer) {
       return;

@@ -21,6 +21,7 @@ import Button from '../components/Button';
 import Loading from '../components/Loading';
 import { SearchIcon, CloseIcon, LocationIcon, EmptyMailboxIcon, SearchNotFoundIcon, FilterIcon, ProfileIcon, RefreshIcon } from '../components/Icons';
 import { useLanguage } from '../contexts/LanguageContext';
+import { navigate as rootNavigate } from '../RootNavigation';
 
 // Mock data for development (when Firebase is not configured)
 const MOCK_OFFERS = [
@@ -81,6 +82,9 @@ export default function SearchResultsScreen({ navigation }) {
   const [userPhotoURL, setUserPhotoURL] = useState(null);
   const [currentUser, setCurrentUser] = useState(auth.currentUser);
   const { language, toggleLanguage } = useLanguage();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  // Import the helper
+  const { requireAuthOrShowModal } = require('./ProfileScreen');
 
   // Translations
   const t = {
@@ -199,11 +203,7 @@ export default function SearchResultsScreen({ navigation }) {
    * Checks if user is authenticated
    */
   const handleCreateOffer = () => {
-    if (!auth.currentUser) {
-      navigation.navigate('AuthFlow');
-    } else {
-      navigation.navigate('CreateOffer');
-    }
+    requireAuthOrShowModal(currentUser, true, navigation, 'CreateOffer', setShowAuthModal);
   };
 
   useEffect(() => {
@@ -446,6 +446,7 @@ export default function SearchResultsScreen({ navigation }) {
     return (
       <Card
         onPress={() => navigation.navigate('OfferDetails', { offerId: item.id })}
+  // For OfferDetails, allow guests to view, but protect actions inside OfferDetailsScreen
         style={styles.offerCard}
       >
         {/* Header: Origin to Destination */}
@@ -589,11 +590,7 @@ export default function SearchResultsScreen({ navigation }) {
             <TouchableOpacity 
               style={styles.iconButton}
               onPress={() => {
-                if (currentUser) {
-                  navigation.navigate('Profile');
-                } else {
-                  navigation.navigate('AuthFlow');
-                }
+                if (!requireAuthOrShowModal(currentUser, true, navigation, 'Profile', setShowAuthModal)) return;
               }}
             >
               {userPhotoURL ? (
@@ -602,6 +599,26 @@ export default function SearchResultsScreen({ navigation }) {
                 <ProfileIcon size={28} color={theme.colors.success} />
               )}
             </TouchableOpacity>
+      {/* Auth Required Modal */}
+      <Modal
+        visible={showAuthModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAuthModal(false)}
+      >
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ backgroundColor: 'white', padding: 24, borderRadius: 12, alignItems: 'center' }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12 }}>Sign In Required</Text>
+            <Text style={{ marginBottom: 20 }}>You need to be signed in to access this feature.</Text>
+            <Button title="Sign In" onPress={() => { 
+              console.log('Sign In button pressed (SearchResultsScreen)');
+              setShowAuthModal(false); 
+              rootNavigate('AuthFlow'); 
+            }} />
+            <Button title="Cancel" variant="outline" onPress={() => setShowAuthModal(false)} style={{ marginTop: 8 }} />
+          </View>
+        </View>
+      </Modal>
           </View>
         </View>
         
@@ -804,6 +821,23 @@ export default function SearchResultsScreen({ navigation }) {
                 style={styles.modalButton}
               />
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Auth Required Modal */}
+      <Modal
+        visible={showAuthModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAuthModal(false)}
+      >
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ backgroundColor: 'white', padding: 24, borderRadius: 12, alignItems: 'center' }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12 }}>Sign In Required</Text>
+            <Text style={{ marginBottom: 20 }}>You need to be signed in to access this feature.</Text>
+            <Button title="Sign In" onPress={() => { setShowAuthModal(false); rootNavigate('AuthFlow'); }} />
+            <Button title="Cancel" variant="outline" onPress={() => setShowAuthModal(false)} style={{ marginTop: 8 }} />
           </View>
         </View>
       </Modal>

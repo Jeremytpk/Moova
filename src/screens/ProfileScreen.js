@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Platform } from 'react-native';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { checkAndApplyUpdate } from '../utils/updateManager';
+import UpdateModal from '../components/UpdateModal';
 import { auth } from '../config/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import { signOut } from 'firebase/auth';
@@ -10,6 +12,7 @@ import Button from '../components/Button';
 import { ProfileIcon, PackageIcon, ShipmentIcon, SettingsIcon, ArrowRightIcon, BookIcon, LockIcon, SheetIcon, MailIcon, LinkIcon } from '../components/Icons';
 import { ShareIcon } from '../components/ShareIcon';
 import { useLanguage } from '../contexts/LanguageContext';
+import { navigate as rootNavigate } from '../RootNavigation';
 
 /**
  * ProfileScreen
@@ -44,6 +47,53 @@ export default function ProfileScreen({ navigation }) {
   const { language, toggleLanguage } = useLanguage();
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState('');
+  const [updateProgress, setUpdateProgress] = useState(null);
+  const [updateLoading, setUpdateLoading] = useState(true);
+  // Manual OTA update handler
+  const handleManualUpdate = async () => {
+    setShowUpdateModal(true);
+    setUpdateLoading(true);
+    setUpdateStatus(language === 'fr' ? 'Vérification des mises à jour...' : 'Checking for updates...');
+    setUpdateProgress(null);
+    await checkAndApplyUpdate(
+      // onUpdateAvailable
+      () => {
+        setUpdateStatus(language === 'fr' ? 'Téléchargement de la mise à jour...' : 'Downloading update...');
+        setUpdateProgress(null);
+      },
+      // onError
+      (err) => {
+        const isTimeout = err?.message?.includes('timed out');
+        setUpdateLoading(false);
+        setUpdateStatus(
+          language === 'fr'
+            ? (isTimeout ? 'La vérification a expiré. Réessayez.' : 'Erreur lors de la vérification.')
+            : (isTimeout ? 'Update check timed out. Please try again.' : 'Error checking for updates.')
+        );
+      },
+      // onNoUpdate
+      (reason) => {
+        setUpdateLoading(false);
+        if (reason === 'not_supported') {
+          setUpdateStatus(
+            language === 'fr'
+              ? 'Les mises à jour ne sont pas disponibles dans cet environnement.'
+              : 'Updates are not available in this environment.'
+          );
+        } else {
+          setUpdateStatus(
+            language === 'fr'
+              ? 'Aucune mise à jour disponible pour le moment.'
+              : 'No update available at this moment.'
+          );
+        }
+      },
+      // timeout: 10 seconds
+      10000
+    );
+  };
 
   // Listen to auth state changes to update user state and trigger re-render
   useEffect(() => {
@@ -199,13 +249,27 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.authButtons}>
                 <TouchableOpacity
                   style={styles.signInButton}
-                  onPress={() => navigation.navigate('AuthFlow')}
+                  onPress={() => {
+                    console.log('Sign In button pressed (ProfileScreen)');
+                    if (navigation && navigation.getParent && navigation.getParent()) {
+                      navigation.getParent().navigate('AuthFlow');
+                    } else {
+                      rootNavigate('AuthFlow');
+                    }
+                  }}
                 >
                   <Text style={styles.signInButtonText}>{text.signIn}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.signUpButton}
-                  onPress={() => navigation.navigate('AuthFlow')}
+                  onPress={() => {
+                    console.log('Sign Up button pressed (ProfileScreen)');
+                    if (navigation && navigation.getParent && navigation.getParent()) {
+                      navigation.getParent().navigate('AuthFlow');
+                    } else {
+                      rootNavigate('AuthFlow');
+                    }
+                  }}
                 >
                   <Text style={styles.signUpButtonText}>{text.signUp}</Text>
                 </TouchableOpacity>
@@ -247,6 +311,14 @@ export default function ProfileScreen({ navigation }) {
         )}
 
         {/* Account Section - Only for logged in users */}
+      {/* OTA Update Modal */}
+      <UpdateModal
+        visible={showUpdateModal}
+        progress={updateProgress}
+        status={updateStatus}
+        isLoading={updateLoading}
+        onClose={() => setShowUpdateModal(false)}
+      />
         {user && (
           <>
             <View style={styles.section}>
@@ -421,6 +493,17 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.actionText}>{text.viewTutorial}</Text>
             <ArrowRightIcon size={20} color={theme.colors.textSecondary} />
           </TouchableOpacity>
+          {/* Check for App Update */}
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={handleManualUpdate}
+          >
+            <View style={styles.actionIconContainer}>
+              <SettingsIcon size={20} color={theme.colors.info} />
+            </View>
+            <Text style={styles.actionText}>{language === 'fr' ? 'Vérifier les mises à jour' : 'Check for App Update'}</Text>
+            <ArrowRightIcon size={20} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
         </View>
 
         {/* Auth Required Modal */}
@@ -443,7 +526,7 @@ export default function ProfileScreen({ navigation }) {
                 style={styles.modalButton}
                 onPress={() => {
                   setShowAuthModal(false);
-                  navigation.navigate('AuthFlow');
+                  rootNavigate('AuthFlow');
                 }}
               >
                 <Text style={styles.modalButtonText}>{language === 'fr' ? 'Se connecter' : 'Sign In'}</Text>

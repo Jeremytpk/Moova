@@ -105,34 +105,39 @@ export default function AuthFlowScreen({ navigation }) {
 
   /**
    * Generate a unique username from name
-   * Format: Random mix of name letters and numbers (7 chars)
-   * Example: "John Doe" -> "J3oh5nD", "Ma8r2ia" etc.
+   * Format: 2-3 letters from first name, 1-2 from last name, then 3 random digits (total 7 chars)
+   * Example: "John Doe" -> "JohD123", "Marie Curie" -> "MarC456", "Li Wang" -> "LiWa789"
    */
   const generateUsername = (fullName) => {
-    // Remove spaces and special characters
-    const cleanName = fullName.replace(/[^a-zA-Z]/g, '');
-    
-    // Get letters from name (up to 5)
-    const nameChars = cleanName.substring(0, 5).split('');
-    
-    // Generate random digits (2-3 digits)
-    const numDigits = Math.floor(2 + Math.random() * 2); // 2 or 3 digits
-    const digits = [];
-    for (let i = 0; i < numDigits; i++) {
-      digits.push(Math.floor(Math.random() * 10).toString());
+    if (!fullName) return '';
+    const parts = fullName.trim().split(/\s+/);
+    const first = parts[0] || '';
+    const last = parts.length > 1 ? parts[parts.length - 1] : '';
+    let firstPart = '';
+    let lastPart = '';
+    if (first.length >= 3 && last.length >= 2) {
+      firstPart = first.substring(0, 3);
+      lastPart = last.substring(0, 2);
+    } else if (first.length >= 2 && last.length >= 2) {
+      firstPart = first.substring(0, 2);
+      lastPart = last.substring(0, 2);
+    } else if (first.length >= 4) {
+      firstPart = first.substring(0, 4);
+      lastPart = '';
+    } else {
+      firstPart = first;
+      lastPart = last.substring(0, Math.max(0, 5 - first.length));
     }
-    
-    // Combine letters and numbers
-    const combined = [...nameChars, ...digits];
-    
-    // Shuffle the array randomly
-    for (let i = combined.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [combined[i], combined[j]] = [combined[j], combined[i]];
+    // Ensure total letters part is 4 or 5
+    let letters = (firstPart + lastPart).substring(0, 5);
+    // Add 3 random digits
+    let digits = '';
+    for (let i = 0; i < 3; i++) {
+      digits += Math.floor(Math.random() * 10).toString();
     }
-    
-    // Take first 7 characters
-    return combined.slice(0, 7).join('');
+    // Truncate or pad to 7 chars
+    let username = (letters + digits).substring(0, 7);
+    return username;
   };
 
   const handleAuth = async () => {

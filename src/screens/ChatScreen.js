@@ -66,6 +66,7 @@ export default function ChatScreen({ route, navigation }) {
       deleteConfirm: 'Are you sure you want to delete this payment request?',
       delete: 'Delete',
       requestCanceled: 'Payment request canceled',
+      chatWithTraveler: 'Chat with Traveler',
     },
     fr: {
       typeMessage: 'Écrivez un message...',
@@ -84,6 +85,7 @@ export default function ChatScreen({ route, navigation }) {
       deleteConfirm: 'Êtes-vous sûr de vouloir supprimer cette demande de paiement?',
       delete: 'Supprimer',
       requestCanceled: 'Demande de paiement annulée',
+      chatWithTraveler: 'Discussion avec le Voyageur',
     },
   };
 
@@ -598,7 +600,7 @@ export default function ChatScreen({ route, navigation }) {
     >
       {/* Chat Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Chat with Traveler</Text>
+          <Text style={styles.headerTitle}>{text.chatWithTraveler || 'Chat with Traveler'}</Text>
         <Text style={styles.headerSubtitle}>{otherUserName || 'User'}</Text>
         
         {/* Payment Request Button (only show for traveler/offer owner) */}
@@ -624,9 +626,9 @@ export default function ChatScreen({ route, navigation }) {
           !loading && (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyIcon}>💬</Text>
-              <Text style={styles.emptyText}>No messages yet</Text>
+              <Text style={styles.emptyText}>{text.noMessages}</Text>
               <Text style={styles.emptySubtext}>
-                Start the conversation by sending a message!
+                {text.startChat || 'Start the conversation by sending a message!'}
               </Text>
             </View>
           )

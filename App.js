@@ -4,6 +4,8 @@ import AdminScreen from './src/screens/AdminScreen';
 import ContactUs from './src/screens/ContactUs';
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { navigationRef } from './src/RootNavigation';
+// Debug: Log when NavigationContainer is mounted and ref is set
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
@@ -142,8 +144,8 @@ function MainTabs() {
         }}
       />
       {user && isTraveler && (
-        <Tab.Screen 
-          name="MyOffers" 
+        <Tab.Screen
+          name="MyOffers"
           component={MyOffersScreen}
           options={{
             tabBarLabel: labels.myOffers,
@@ -195,17 +197,9 @@ function MainTabs() {
             </View>
           ),
         }}
-        listeners={({ navigation }) => ({
-          tabPress: e => {
-            if (!user) {
-              e.preventDefault();
-              navigation.navigate('AuthFlow');
-            }
-          },
-        })}
       />
-      <Tab.Screen 
-        name="MyShipments" 
+      <Tab.Screen
+        name="MyShipments"
         component={user ? MyShipmentsScreen : AuthFlowScreen}
         options={{
           tabBarLabel: labels.shipments,
@@ -213,14 +207,6 @@ function MainTabs() {
             <ShipmentIcon size={24} />
           ),
         }}
-        listeners={({ navigation }) => ({
-          tabPress: e => {
-            if (!user) {
-              e.preventDefault();
-              navigation.navigate('AuthFlow');
-            }
-          },
-        })}
       />
       <Tab.Screen
         name="Profile"
@@ -245,7 +231,7 @@ function AppNavigator() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const { language } = useLanguage();
-  const navigationRef = React.useRef();
+  const localNavigationRef = React.useRef();
 
   // Header titles translations
   const headerTitles = {
@@ -312,15 +298,15 @@ function AppNavigator() {
     const subscription = addNotificationResponseListener(response => {
       const data = response.notification.request.content.data;
 
-      if (navigationRef.current) {
+      if (localNavigationRef.current) {
         if (data.type === 'new_offer' && data.offerId) {
           // Navigate to offer details
-          navigationRef.current.navigate('OfferDetails', {
+          localNavigationRef.current.navigate('OfferDetails', {
             offerId: data.offerId,
           });
         } else if (data.type === 'new_message' && data.chatId) {
           // Navigate to chat
-          navigationRef.current.navigate('Chat', {
+          localNavigationRef.current.navigate('Chat', {
             chatId: data.chatId,
             otherUserId: data.otherUserId,
             otherUserName: data.otherUserName,
@@ -334,7 +320,7 @@ function AppNavigator() {
   }, []);
 
   return (
-    <NavigationContainer ref={navigationRef}>
+  <NavigationContainer ref={navigationRef} onReady={() => { localNavigationRef.current = navigationRef.current; }}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: {

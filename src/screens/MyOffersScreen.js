@@ -174,6 +174,9 @@ export default function MyOffersScreen({ navigation }) {
   };
 
   const handleEditOffer = (offerId) => {
+    // Use requireAuthOrShowModal for auth check
+    const { requireAuthOrShowModal } = require('./ProfileScreen');
+    if (!requireAuthOrShowModal(currentUser, true, navigation, 'CreateOffer', () => {})) return;
     navigation.navigate('CreateOffer', {
       offerId: offerId,
       isEditing: true
