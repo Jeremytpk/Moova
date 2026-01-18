@@ -47,8 +47,8 @@ function calculateFeeBreakdown(kg, pricePerKg) {
 exports.createPaymentIntent = onCall(
   { secrets: [stripeSecretKey] },
   async (request) => {
-  // Initialize Stripe with the secret key
-  const stripe = require('stripe')(stripeSecretKey.value());
+  // Initialize Stripe with the secret key (trim to remove any whitespace/newlines)
+  const stripe = require('stripe')(stripeSecretKey.value().trim());
 
   const { data, auth } = request;
   // Verify user is authenticated
@@ -109,8 +109,8 @@ exports.createPaymentIntent = onCall(
 exports.confirmPayment = onCall(
   { secrets: [stripeSecretKey] },
   async (request) => {
-  // Initialize Stripe with the secret key
-  const stripe = require('stripe')(stripeSecretKey.value());
+  // Initialize Stripe with the secret key (trim to remove any whitespace/newlines)
+  const stripe = require('stripe')(stripeSecretKey.value().trim());
 
   const { data, auth } = request;
 
