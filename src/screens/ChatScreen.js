@@ -145,6 +145,25 @@ export default function ChatScreen({ route, navigation }) {
     return () => unsubscribe();
   }, [chatId, currentUser]);
 
+  // Mark messages as read when chat is opened
+  useEffect(() => {
+    if (!currentUser || !chatId) return;
+
+    const markAsRead = async () => {
+      try {
+        const chatRef = doc(db, 'users', currentUser.uid, 'chats', chatId);
+        await updateDoc(chatRef, {
+          unreadCount: 0,
+        });
+        console.log('Messages marked as read');
+      } catch (error) {
+        console.error('Error marking messages as read:', error);
+      }
+    };
+
+    markAsRead();
+  }, [chatId, currentUser]);
+
   const sendMessage = async () => {
     if (!messageText.trim() || !currentUser || !chatId) return;
     // Block sending sensitive info

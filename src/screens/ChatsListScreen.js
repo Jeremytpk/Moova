@@ -217,11 +217,13 @@ export default function ChatsListScreen({ navigation }) {
     const lastMessage = item.lastMessageText || '';
     const isCurrentUserSender = item.lastMessageSenderId === currentUser.uid;
     const displayMessage = isCurrentUserSender ? `${text.you}: ${lastMessage}` : lastMessage;
+    const unreadCount = item.unreadCount || 0;
+    const hasUnread = unreadCount > 0;
 
     return (
       <TouchableOpacity
         style={styles.chatItem}
-        onPress={() => navigation.navigate('Chat', { 
+        onPress={() => navigation.navigate('Chat', {
           chatId: item.id,
           otherUserId: item.otherUserId,
           otherUserName: item.otherUserName,
@@ -234,18 +236,25 @@ export default function ChatsListScreen({ navigation }) {
               {item.otherUserName.charAt(0).toUpperCase()}
             </Text>
           </View>
+          {hasUnread && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.chatContent}>
           <View style={styles.chatHeader}>
-            <Text style={styles.chatName} numberOfLines={1}>
+            <Text style={[styles.chatName, hasUnread && styles.chatNameUnread]} numberOfLines={1}>
               {item.otherUserName}
             </Text>
             <View style={styles.timeAndDeleteContainer}>
               <Text style={styles.chatTime}>
                 {formatTime(item.lastMessageTime)}
               </Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.deleteButton}
                 onPress={() => handleDeleteChat(item.id, item.otherUserName)}
               >
@@ -253,8 +262,8 @@ export default function ChatsListScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
-          
-          <Text style={styles.lastMessage} numberOfLines={2}>
+
+          <Text style={[styles.lastMessage, hasUnread && styles.lastMessageUnread]} numberOfLines={2}>
             {displayMessage || 'Start chatting...'}
           </Text>
         </View>
@@ -373,6 +382,7 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     marginRight: theme.spacing.md,
+    position: 'relative',
   },
   avatar: {
     width: 50,
@@ -386,6 +396,25 @@ const styles = StyleSheet.create({
     ...theme.typography.h2,
     color: theme.colors.white,
     fontSize: 20,
+    fontWeight: '700',
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: theme.colors.error,
+    borderRadius: 12,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: theme.colors.background,
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
     fontWeight: '700',
   },
   chatContent: {
@@ -403,6 +432,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
     flex: 1,
+  },
+  chatNameUnread: {
+    fontWeight: '700',
+    color: theme.colors.text,
   },
   chatTime: {
     ...theme.typography.caption,
@@ -430,21 +463,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  unreadBadge: {
-    backgroundColor: theme.colors.success,
-    borderRadius: theme.borderRadius.full,
-    minWidth: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.xs,
-    marginLeft: theme.spacing.sm,
-  },
-  unreadText: {
-    ...theme.typography.caption,
-    color: theme.colors.white,
-    fontWeight: '700',
-    fontSize: 12,
+  lastMessageUnread: {
+    fontWeight: '600',
+    color: theme.colors.text,
   },
   emptyContainer: {
     flex: 1,
