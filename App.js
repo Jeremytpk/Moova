@@ -7,7 +7,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { TouchableOpacity, View, StyleSheet, Platform } from 'react-native';
+import { TouchableOpacity, View, Text, StyleSheet, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth } from './src/config/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -68,6 +68,11 @@ function MainTabs() {
   const [isTraveler, setIsTraveler] = useState(false);
   const { language } = useLanguage();
   const { unreadCount } = useUnreadMessages();
+
+  // Debug: Log unreadCount changes
+  useEffect(() => {
+    console.log('MainTabs: Unread count changed to:', unreadCount);
+  }, [unreadCount]);
 
   // Tab labels translations
   const tabLabels = {

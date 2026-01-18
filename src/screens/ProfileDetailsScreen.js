@@ -181,19 +181,22 @@ export default function ProfileDetailsScreen({ navigation }) {
             <TouchableOpacity
               onPress={async () => {
                 try {
-                  // Request permission
-                  const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                  // Request permission (skip on web - browser handles this)
+                  if (Platform.OS !== 'web') {
+                    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-                  if (permissionResult.granted === false) {
-                    Alert.alert(
-                      language === 'en' ? 'Permission Required' : 'Permission requise',
-                      language === 'en' ? 'Please allow access to your photo library.' : 'Veuillez autoriser l\'accès à votre bibliothèque photos.'
-                    );
-                    return;
+                    if (permissionResult.granted === false) {
+                      Alert.alert(
+                        language === 'en' ? 'Permission Required' : 'Permission requise',
+                        language === 'en' ? 'Please allow access to your photo library.' : 'Veuillez autoriser l\'accès à votre bibliothèque photos.'
+                      );
+                      return;
+                    }
                   }
 
                   // Pick image from gallery
                   const result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ['images'],
                     allowsEditing: true,
                     aspect: [1, 1],
                     quality: 0.7,

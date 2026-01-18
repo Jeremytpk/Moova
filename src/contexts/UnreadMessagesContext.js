@@ -15,15 +15,31 @@ export const useUnreadMessages = () => {
 export const UnreadMessagesProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
 
+  // Listen to auth state changes
   useEffect(() => {
-    const currentUser = auth.currentUser;
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      console.log('UnreadMessages: Auth state changed, user:', user ? user.uid : 'null');
+      setCurrentUser(user);
+      if (!user) {
+        setUnreadCount(0);
+        setLoading(false);
+      }
+    });
 
+    return () => unsubscribe();
+  }, []);
+
+  // Listen to chats when user changes
+  useEffect(() => {
     if (!currentUser) {
       setUnreadCount(0);
       setLoading(false);
       return;
     }
+
+    console.log('UnreadMessages: Setting up listener for user:', currentUser.uid);
 
     // Listen to all chats for the current user
     const userChatsRef = collection(db, 'users', currentUser.uid, 'chats');
@@ -33,9 +49,14 @@ export const UnreadMessagesProvider = ({ children }) => {
 
       snapshot.forEach((doc) => {
         const chatData = doc.data();
-        totalUnread += chatData.unreadCount || 0;
+        const count = chatData.unreadCount || 0;
+        totalUnread += count;
+        if (count > 0) {
+          console.log('UnreadMessages: Chat', doc.id, 'has', count, 'unread messages');
+        }
       });
 
+      console.log('UnreadMessages: Total unread count:', totalUnread);
       setUnreadCount(totalUnread);
       setLoading(false);
     }, (error) => {
@@ -44,18 +65,7 @@ export const UnreadMessagesProvider = ({ children }) => {
     });
 
     return () => unsubscribe();
-  }, []);
-
-  // Listen to auth state changes
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (!user) {
-        setUnreadCount(0);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
+  }, [currentUser]);
 
   return (
     <UnreadMessagesContext.Provider value={{ unreadCount, loading }}>
