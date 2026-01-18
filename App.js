@@ -14,6 +14,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import theme from './src/theme';
 import { ProfileIcon, SearchIcon, PackageIcon, ShipmentIcon, ChatIcon } from './src/components/Icons';
 import { LanguageProvider, useLanguage } from './src/contexts/LanguageContext';
+import { UnreadMessagesProvider } from './src/contexts/UnreadMessagesContext';
+import { registerForPushNotifications, addNotificationResponseListener } from './src/utils/pushNotifications';
 
 // Conditionally import Stripe providers based on platform
 let StripeProvider;
@@ -59,11 +61,13 @@ const Tab = createBottomTabNavigator();
  */
 
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import { useUnreadMessages } from './src/contexts/UnreadMessagesContext';
 
 function MainTabs() {
   const [user, setUser] = useState(null);
   const [isTraveler, setIsTraveler] = useState(false);
   const { language } = useLanguage();
+  const { unreadCount } = useUnreadMessages();
 
   // Tab labels translations
   const tabLabels = {
@@ -144,13 +148,46 @@ function MainTabs() {
           }}
         />
       )}
-      <Tab.Screen 
-        name="Chats" 
+      <Tab.Screen
+        name="Chats"
         component={user ? ChatsListScreen : AuthFlowScreen}
         options={{
           tabBarLabel: labels.chats,
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: theme.colors.error,
+            color: '#FFFFFF',
+            fontSize: 10,
+            minWidth: 18,
+            height: 18,
+            borderRadius: 9,
+            lineHeight: 18,
+          },
           tabBarIcon: ({ color, focused }) => (
-            <ChatIcon size={24} color={focused ? theme.colors.primary : theme.colors.textSecondary} />
+            <View style={{ position: 'relative' }}>
+              <ChatIcon size={24} color={focused ? theme.colors.primary : theme.colors.textSecondary} />
+              {unreadCount > 0 && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    right: -6,
+                    top: -3,
+                    backgroundColor: theme.colors.error,
+                    borderRadius: 8,
+                    minWidth: 16,
+                    height: 16,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    borderWidth: 2,
+                    borderColor: theme.colors.background,
+                  }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: 'bold' }}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </View>
           ),
         }}
         listeners={({ navigation }) => ({
@@ -203,6 +240,7 @@ function AppNavigator() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const { language } = useLanguage();
+  const navigationRef = React.useRef();
 
   // Header titles translations
   const headerTitles = {
@@ -249,6 +287,9 @@ function AppNavigator() {
         } catch (e) {
           setIsAdmin(false);
         }
+
+        // Register for push notifications when user logs in
+        registerForPushNotifications(currentUser.uid);
       } else {
         setIsAdmin(false);
       }
@@ -256,8 +297,34 @@ function AppNavigator() {
     return unsubscribe;
   }, []);
 
+  // Handle notification tap navigation
+  useEffect(() => {
+    const subscription = addNotificationResponseListener(response => {
+      const data = response.notification.request.content.data;
+
+      if (navigationRef.current) {
+        if (data.type === 'new_offer' && data.offerId) {
+          // Navigate to offer details
+          navigationRef.current.navigate('OfferDetails', {
+            offerId: data.offerId,
+          });
+        } else if (data.type === 'new_message' && data.chatId) {
+          // Navigate to chat
+          navigationRef.current.navigate('Chat', {
+            chatId: data.chatId,
+            otherUserId: data.otherUserId,
+            otherUserName: data.otherUserName,
+            offerId: data.offerId,
+          });
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: {
@@ -462,26 +529,28 @@ export default function App() {
     return (
       <AppContent>
         <LanguageProvider>
-          <StatusBar style="auto" />
-          <NavigationContainer>
-            <Stack.Navigator screenOptions={{ headerShown: false }}>
-              <Stack.Screen
-                name="LanguageSelection"
-                component={LanguageSelectionScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="Onboarding"
-                component={OnboardingScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="MainTabs"
-                component={MainTabs}
-                options={{ headerShown: false }}
-              />
-            </Stack.Navigator>
-          </NavigationContainer>
+          <UnreadMessagesProvider>
+            <StatusBar style="auto" />
+            <NavigationContainer>
+              <Stack.Navigator screenOptions={{ headerShown: false }}>
+                <Stack.Screen
+                  name="LanguageSelection"
+                  component={LanguageSelectionScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="Onboarding"
+                  component={OnboardingScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="MainTabs"
+                  component={MainTabs}
+                  options={{ headerShown: false }}
+                />
+              </Stack.Navigator>
+            </NavigationContainer>
+          </UnreadMessagesProvider>
         </LanguageProvider>
       </AppContent>
     );
@@ -490,8 +559,10 @@ export default function App() {
   return (
     <AppContent>
       <LanguageProvider>
-        <StatusBar style="auto" />
-        <AppNavigator />
+        <UnreadMessagesProvider>
+          <StatusBar style="auto" />
+          <AppNavigator />
+        </UnreadMessagesProvider>
       </LanguageProvider>
     </AppContent>
   );

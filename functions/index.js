@@ -1,11 +1,16 @@
 const { onCall } = require('firebase-functions/v2/https');
+const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
+const { Expo } = require('expo-server-sdk');
 
 // Define the Stripe secret key as a secret parameter
 const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
 
 admin.initializeApp();
+
+// Initialize Expo SDK
+const expo = new Expo();
 
 /**
  * Fee calculation functions
@@ -421,3 +426,163 @@ function generateOrderNumber() {
   }
   return orderNumber;
 }
+
+/**
+ * Send push notifications using Expo
+ * @param {Array} tokens - Array of Expo push tokens
+ * @param {object} notification - Notification data
+ */
+async function sendPushNotifications(tokens, notification) {
+  const messages = [];
+
+  for (const pushToken of tokens) {
+    // Check that the token is valid
+    if (!Expo.isExpoPushToken(pushToken)) {
+      console.error(`Push token ${pushToken} is not a valid Expo push token`);
+      continue;
+    }
+
+    messages.push({
+      to: pushToken,
+      sound: 'default',
+      title: notification.title,
+      body: notification.body,
+      data: notification.data || {},
+      channelId: notification.channelId || 'default',
+    });
+  }
+
+  // Send notifications in chunks
+  const chunks = expo.chunkPushNotifications(messages);
+  const tickets = [];
+
+  for (const chunk of chunks) {
+    try {
+      const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+      tickets.push(...ticketChunk);
+    } catch (error) {
+      console.error('Error sending push notification chunk:', error);
+    }
+  }
+
+  return tickets;
+}
+
+/**
+ * Firestore Trigger: Send notification when a new offer is created
+ */
+exports.onOfferCreated = onDocumentCreated('offers/{offerId}', async (event) => {
+  try {
+    const offerData = event.data.data();
+    const offerId = event.params.offerId;
+
+    console.log('New offer created:', offerId, offerData);
+
+    // Get all users with push tokens (exclude the offer creator)
+    const db = admin.firestore();
+    const usersSnapshot = await db.collection('users')
+      .where('expoPushToken', '!=', null)
+      .get();
+
+    const pushTokens = [];
+    usersSnapshot.forEach(doc => {
+      const userData = doc.data();
+      // Don't send notification to the user who created the offer
+      if (doc.id !== offerData.userId && userData.expoPushToken) {
+        pushTokens.push(userData.expoPushToken);
+      }
+    });
+
+    if (pushTokens.length === 0) {
+      console.log('No users with push tokens found');
+      return;
+    }
+
+    // Send notification
+    await sendPushNotifications(pushTokens, {
+      title: '✈️ New Travel Offer Available!',
+      body: `${offerData.origin} → ${offerData.destination} | ${offerData.availableCapacity}kg available at $${offerData.pricePerKg}/kg`,
+      data: {
+        type: 'new_offer',
+        offerId: offerId,
+      },
+      channelId: 'offers',
+    });
+
+    console.log(`Sent new offer notification to ${pushTokens.length} users`);
+  } catch (error) {
+    console.error('Error sending new offer notification:', error);
+  }
+});
+
+/**
+ * Firestore Trigger: Send notification when a new message is received
+ * Triggers on messages in users/{userId}/chats/{chatId}/messages/{messageId}
+ */
+exports.onMessageCreated = onDocumentCreated(
+  'users/{userId}/chats/{chatId}/messages/{messageId}',
+  async (event) => {
+    try {
+      const messageData = event.data.data();
+      const { userId, chatId } = event.params;
+      const senderId = messageData.senderId;
+
+      console.log('New message created:', { userId, chatId, senderId });
+
+      // Don't send notification to the sender
+      if (userId === senderId) {
+        console.log('Skipping notification - user is the sender');
+        return;
+      }
+
+      // Get the recipient's push token
+      const db = admin.firestore();
+      const userDoc = await db.collection('users').doc(userId).get();
+
+      if (!userDoc.exists) {
+        console.log('User not found');
+        return;
+      }
+
+      const userData = userDoc.data();
+      const pushToken = userData.expoPushToken;
+
+      if (!pushToken) {
+        console.log('User does not have a push token');
+        return;
+      }
+
+      // Get sender's name
+      const senderDoc = await db.collection('users').doc(senderId).get();
+      const senderName = senderDoc.exists
+        ? (senderDoc.data().username || senderDoc.data().email || 'Someone')
+        : 'Someone';
+
+      // Get chat info to include in notification data
+      const chatDoc = await db.collection('users').doc(userId).collection('chats').doc(chatId).get();
+      const chatData = chatDoc.exists ? chatDoc.data() : {};
+
+      // Send notification only for regular messages (not payment requests shown separately)
+      const messageText = messageData.type === 'paymentRequest'
+        ? '💳 Sent a payment request'
+        : messageData.text;
+
+      await sendPushNotifications([pushToken], {
+        title: `💬 ${senderName}`,
+        body: messageText,
+        data: {
+          type: 'new_message',
+          chatId: chatId,
+          otherUserId: senderId,
+          otherUserName: senderName,
+          offerId: chatData.offerId || '',
+        },
+        channelId: 'chat',
+      });
+
+      console.log(`Sent message notification to user ${userId}`);
+    } catch (error) {
+      console.error('Error sending message notification:', error);
+    }
+  }
+);
