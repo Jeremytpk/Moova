@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...theme.typography.h1,
-    color: theme.colors.white,
+    color: 'white',
     fontSize: 28,
     fontWeight: '700',
   },
