@@ -79,9 +79,7 @@ exports.createPaymentIntent = onCall(
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // Stripe uses cents
       currency: currency,
-      automatic_payment_methods: {
-        enabled: true,
-      },
+      payment_method_types: ['card'], // Explicitly specify card payments
       metadata: {
         userId: auth.uid,
         kg: kg.toString(),
