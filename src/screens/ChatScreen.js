@@ -11,7 +11,8 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { useFocusEffect } from '@react-navigation/native';
+import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../config/firebaseConfig';
 import theme from '../theme';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -145,24 +146,26 @@ export default function ChatScreen({ route, navigation }) {
     return () => unsubscribe();
   }, [chatId, currentUser]);
 
-  // Mark messages as read when chat is opened
-  useEffect(() => {
-    if (!currentUser || !chatId) return;
+  // Mark messages as read when chat is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!currentUser || !chatId) return;
 
-    const markAsRead = async () => {
-      try {
-        const chatRef = doc(db, 'users', currentUser.uid, 'chats', chatId);
-        await updateDoc(chatRef, {
-          unreadCount: 0,
-        });
-        console.log('Messages marked as read');
-      } catch (error) {
-        console.error('Error marking messages as read:', error);
-      }
-    };
+      const markAsRead = async () => {
+        try {
+          const chatRef = doc(db, 'users', currentUser.uid, 'chats', chatId);
+          await updateDoc(chatRef, {
+            unreadCount: 0,
+          });
+          console.log('Messages marked as read');
+        } catch (error) {
+          console.error('Error marking messages as read:', error);
+        }
+      };
 
-    markAsRead();
-  }, [chatId, currentUser]);
+      markAsRead();
+    }, [chatId, currentUser])
+  );
 
   const sendMessage = async () => {
     if (!messageText.trim() || !currentUser || !chatId) return;
