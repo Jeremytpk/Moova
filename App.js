@@ -297,8 +297,13 @@ function AppNavigator() {
     return unsubscribe;
   }, []);
 
-  // Handle notification tap navigation
+  // Handle notification tap navigation (native only)
   useEffect(() => {
+    // Skip on web - notifications don't work on web
+    if (Platform.OS === 'web') {
+      return;
+    }
+
     const subscription = addNotificationResponseListener(response => {
       const data = response.notification.request.content.data;
 

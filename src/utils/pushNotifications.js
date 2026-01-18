@@ -1,19 +1,24 @@
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebaseConfig';
 
-/**
- * Configure notification behavior
- */
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// Only import notifications on native platforms
+let Notifications, Device;
+if (Platform.OS !== 'web') {
+  Notifications = require('expo-notifications');
+  Device = require('expo-device');
+
+  /**
+   * Configure notification behavior (native only)
+   */
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+}
 
 /**
  * Register for push notifications and get the Expo push token
@@ -145,6 +150,10 @@ export async function sendPushNotification(expoPushTokens, notification) {
  * @returns {object} - Subscription object
  */
 export function addNotificationResponseListener(handler) {
+  if (Platform.OS === 'web') {
+    // Return a dummy subscription for web
+    return { remove: () => {} };
+  }
   return Notifications.addNotificationResponseReceivedListener(handler);
 }
 
@@ -155,6 +164,10 @@ export function addNotificationResponseListener(handler) {
  * @returns {object} - Subscription object
  */
 export function addNotificationReceivedListener(handler) {
+  if (Platform.OS === 'web') {
+    // Return a dummy subscription for web
+    return { remove: () => {} };
+  }
   return Notifications.addNotificationReceivedListener(handler);
 }
 
@@ -162,6 +175,9 @@ export function addNotificationReceivedListener(handler) {
  * Clear all notifications
  */
 export async function clearAllNotifications() {
+  if (Platform.OS === 'web') {
+    return;
+  }
   await Notifications.dismissAllNotificationsAsync();
 }
 
@@ -170,7 +186,7 @@ export async function clearAllNotifications() {
  * @param {number} count - Badge count
  */
 export async function setBadgeCount(count) {
-  if (Platform.OS === 'ios') {
+  if (Platform.OS === 'ios' && Notifications) {
     await Notifications.setBadgeCountAsync(count);
   }
 }
