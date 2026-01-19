@@ -249,27 +249,13 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.authButtons}>
                 <TouchableOpacity
                   style={styles.signInButton}
-                  onPress={() => {
-                    console.log('Sign In button pressed (ProfileScreen)');
-                    if (navigation && navigation.getParent && navigation.getParent()) {
-                      navigation.getParent().navigate('AuthFlow');
-                    } else {
-                      rootNavigate('AuthFlow');
-                    }
-                  }}
+                  onPress={() => navigation.navigate('AuthFlow')}
                 >
                   <Text style={styles.signInButtonText}>{text.signIn}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.signUpButton}
-                  onPress={() => {
-                    console.log('Sign Up button pressed (ProfileScreen)');
-                    if (navigation && navigation.getParent && navigation.getParent()) {
-                      navigation.getParent().navigate('AuthFlow');
-                    } else {
-                      rootNavigate('AuthFlow');
-                    }
-                  }}
+                  onPress={() => navigation.navigate('AuthFlow')}
                 >
                   <Text style={styles.signUpButtonText}>{text.signUp}</Text>
                 </TouchableOpacity>
@@ -447,7 +433,7 @@ export default function ProfileScreen({ navigation }) {
               <ArrowRightIcon size={20} color={theme.colors.textSecondary} />
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('ContactUs')}>
+          <TouchableOpacity style={styles.actionItem} onPress={() => rootNavigate('ContactUs')}>
             <View style={styles.actionIconContainer}>
               <MailIcon size={20} color={theme.colors.primary} />
             </View>
@@ -463,8 +449,8 @@ export default function ProfileScreen({ navigation }) {
             onPress={async () => {
               const { Share } = await import('react-native');
               Share.share({
-                message: `Check out Moova! Send and receive packages easily. Try it now: https://moovacongo.netlify.app`,
-                url: 'https://moovacongo.netlify.app',
+                message: `Check out Moova! Send and receive packages easily. Try it now: www.moova.africa`,
+                url: 'https://www.moova.africa',
                 title: 'Moova - Your Trusted Shipping Companion',
               });
             }}
@@ -485,7 +471,7 @@ export default function ProfileScreen({ navigation }) {
           {/* View Tutorial / Onboarding */}
           <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => navigation.navigate('Onboarding')}
+            onPress={() => rootNavigate('Onboarding')}
           >
             <View style={styles.actionIconContainer}>
               <BookIcon size={20} color={theme.colors.primary} />
@@ -546,7 +532,7 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.sectionTitle}>{text.legal}</Text>
           <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => navigation.navigate('PrivacyPolicy')}
+            onPress={() => rootNavigate('PrivacyPolicy')}
           >
             <View style={styles.actionIconContainer}>
               <LockIcon size={20} color={theme.colors.primary} />
@@ -556,7 +542,7 @@ export default function ProfileScreen({ navigation }) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => navigation.navigate('TermsConditions')}
+            onPress={() => rootNavigate('TermsConditions')}
           >
             <View style={styles.actionIconContainer}>
               <SheetIcon size={20} color={theme.colors.primary} />
