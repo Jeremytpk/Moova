@@ -46,6 +46,120 @@ function calculateFeeBreakdown(kg, pricePerKg) {
 }
 
 /**
+ * Create Payment Sheet
+ * Called by the app to initialize Stripe Payment Sheet (with Apple Pay/Google Pay support)
+ * Returns clientSecret, ephemeralKey, and customer ID needed for Payment Sheet
+ */
+exports.createPaymentSheet = onCall(
+  {
+    secrets: [stripeSecretKey],
+    cors: true,
+  },
+  async (request) => {
+    // Initialize Stripe with the secret key
+    const stripe = require('stripe')(stripeSecretKey.value().trim());
+
+    const { data, auth } = request;
+
+    console.log('createPaymentSheet called with auth:', auth?.uid, 'data:', data);
+
+    // Verify user is authenticated
+    if (!auth) {
+      // For debugging, also check if senderId was passed
+      if (data.senderId) {
+        console.log('No auth but senderId provided:', data.senderId);
+      }
+      throw new Error('User must be authenticated');
+    }
+
+    const { amount, currency = 'usd', kg, offerId, travelerId, senderId } = data;
+
+    // Validate input
+    if (!amount || !kg || !offerId || !travelerId) {
+      throw new Error('Missing required fields');
+    }
+
+    if (amount <= 0) {
+      throw new Error('Amount must be greater than 0');
+    }
+
+    try {
+      console.log('Creating payment sheet for:', {
+        amount,
+        kg,
+        offerId,
+        userId: auth.uid,
+      });
+
+      const db = admin.firestore();
+
+      // Get or create Stripe customer for this user
+      let customerId;
+      const userRef = db.collection('users').doc(auth.uid);
+      const userDoc = await userRef.get();
+      const userData = userDoc.exists ? userDoc.data() : {};
+
+      if (userData.stripeCustomerId) {
+        // Use existing customer
+        customerId = userData.stripeCustomerId;
+        console.log('Using existing Stripe customer:', customerId);
+      } else {
+        // Create a new Stripe customer
+        const customer = await stripe.customers.create({
+          metadata: {
+            firebaseUserId: auth.uid,
+          },
+          email: userData.email || undefined,
+          name: userData.username || userData.fullName || undefined,
+        });
+        customerId = customer.id;
+
+        // Save customer ID to user document
+        await userRef.set({ stripeCustomerId: customerId }, { merge: true });
+        console.log('Created new Stripe customer:', customerId);
+      }
+
+      // Create an ephemeral key for the customer
+      const ephemeralKey = await stripe.ephemeralKeys.create(
+        { customer: customerId },
+        { apiVersion: '2023-10-16' }
+      );
+
+      // Create a PaymentIntent
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Stripe uses cents
+        currency: currency,
+        customer: customerId,
+        automatic_payment_methods: {
+          enabled: true,
+        },
+        metadata: {
+          userId: auth.uid,
+          kg: kg.toString(),
+          offerId: offerId,
+          travelerId: travelerId,
+        },
+      });
+
+      console.log('Payment sheet created:', {
+        paymentIntentId: paymentIntent.id,
+        customerId: customerId,
+      });
+
+      return {
+        clientSecret: paymentIntent.client_secret,
+        ephemeralKey: ephemeralKey.secret,
+        customer: customerId,
+        paymentIntentId: paymentIntent.id,
+      };
+    } catch (error) {
+      console.error('Error creating payment sheet:', error);
+      throw new Error(error.message);
+    }
+  }
+);
+
+/**
  * Create Payment Intent
  * Called by the app to initialize a Stripe payment
  */

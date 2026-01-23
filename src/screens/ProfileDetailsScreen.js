@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, Image, Platform } from 'react-native';
 import { auth } from '../config/firebaseConfig';
 import { updateProfile } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebaseConfig';
 import theme from '../theme';
 import { ProfileIcon } from '../components/Icons';
@@ -25,6 +25,7 @@ export default function ProfileDetailsScreen({ navigation }) {
   const { language } = useLanguage();
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ totalOffers: 0, totalShipments: 0, totalEarnings: 0 });
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [phoneInput, setPhoneInput] = useState('');
   const [phoneError, setPhoneError] = useState('');
@@ -66,6 +67,29 @@ export default function ProfileDetailsScreen({ navigation }) {
         if (userDoc.exists()) {
           setUserData(userDoc.data());
         }
+
+        // Fetch statistics from collections
+        const offersQuery = query(
+          collection(db, 'offers'),
+          where('userId', '==', currentUser.uid)
+        );
+
+        const [offersSnapshot, shipmentsSnapshot] = await Promise.all([
+          getDocs(offersQuery),
+          getDocs(collection(db, 'users', currentUser.uid, 'shipments')),
+        ]);
+
+        const totalOffers = offersSnapshot.size;
+        const totalShipments = shipmentsSnapshot.size;
+
+        // Calculate total earnings from all offers (sum of totalEarnings per offer)
+        let totalEarnings = 0;
+        offersSnapshot.forEach(doc => {
+          const offer = doc.data();
+          totalEarnings += offer.totalEarnings || 0;
+        });
+
+        setStats({ totalOffers, totalShipments, totalEarnings });
       } catch (error) {
         console.error('Error fetching user data:', error);
       } finally {
@@ -398,16 +422,16 @@ export default function ProfileDetailsScreen({ navigation }) {
           <Text style={styles.sectionTitle}>{text.accountStats}</Text>
           <View style={styles.statsGrid}>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{userData.totalOffers || 0}</Text>
+              <Text style={styles.statValue}>{stats.totalOffers}</Text>
               <Text style={styles.statLabel}>{text.totalOffers}</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{userData.totalShipments || 0}</Text>
+              <Text style={styles.statValue}>{stats.totalShipments}</Text>
               <Text style={styles.statLabel}>{text.totalShipments}</Text>
             </View>
             <View style={styles.statCard}>
               <Text style={styles.statValue}>
-                ${(userData.totalEarnings || 0).toFixed(2)}
+                ${stats.totalEarnings.toFixed(2)}
               </Text>
               <Text style={styles.statLabel}>{text.totalEarnings}</Text>
             </View>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,17 +10,21 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Animated,
 } from 'react-native';
 import theme from '../theme';
 import { useLanguage } from '../contexts/LanguageContext';
 import { calculateFeeBreakdown, formatCurrency, getServiceFeeDescription } from '../utils/feeCalculations';
 
 // Conditionally import Stripe based on platform
-let CardField, useStripe, CardElement, useElements;
+let useStripe;
+let CardElement, useElements;
+let CardField; // Native card input component
+
 if (Platform.OS !== 'web') {
   const StripeReactNative = require('@stripe/stripe-react-native');
-  CardField = StripeReactNative.CardField;
   useStripe = StripeReactNative.useStripe;
+  CardField = StripeReactNative.CardField;
 } else {
   const StripeReactStripeJs = require('@stripe/react-stripe-js');
   CardElement = StripeReactStripeJs.CardElement;
@@ -31,84 +35,211 @@ if (Platform.OS !== 'web') {
 /**
  * PaymentModal
  * Modal for sender to enter payment information
+ * Uses Stripe CardField on native, CardElement on web
+ * Card payment only
  */
 export default function PaymentModal({
   visible,
   onClose,
-  paymentRequest, // { kg, amount, pricePerKg, offerId, travelerId, clientSecret }
+  paymentRequest, // { kg, amount, pricePerKg, offerId, travelerId, clientSecret, ephemeralKey, customer, paymentIntentId }
   onProcessPayment,
 }) {
   const { language } = useLanguage();
   const stripe = useStripe();
   const elements = Platform.OS === 'web' ? useElements() : null;
+
+  // Get confirmPayment from the hook (native only)
+  const { confirmPayment } = Platform.OS !== 'web' ? stripe || {} : {};
+
+  // Form state
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [cardComplete, setCardComplete] = useState(false);
+  const [cardDetails, setCardDetails] = useState(null); // Store card details for Android
   const [loading, setLoading] = useState(false);
 
-  // Calculate fee breakdown
-  const feeBreakdown = paymentRequest?.kg && paymentRequest?.pricePerKg
-    ? calculateFeeBreakdown(paymentRequest.kg, paymentRequest.pricePerKg)
-    : null;
+  // Animation
+  const fadeAnim = useState(new Animated.Value(0))[0];
+  const slideAnim = useState(new Animated.Value(50))[0];
+
+  // Calculate fee breakdown using baseAmount and kg if available, else fallback to pricePerKg
+  let feeBreakdown = null;
+  if (paymentRequest?.kg && paymentRequest?.baseAmount) {
+    const pricePerKg = paymentRequest.baseAmount / paymentRequest.kg;
+    feeBreakdown = calculateFeeBreakdown(paymentRequest.kg, pricePerKg);
+  } else if (paymentRequest?.kg && paymentRequest?.pricePerKg) {
+    feeBreakdown = calculateFeeBreakdown(paymentRequest.kg, paymentRequest.pricePerKg);
+  }
 
   // Translations
   const translations = {
     en: {
-      paymentDetails: 'Payment Details',
+      paymentDetails: 'Complete Payment',
+      securePayment: 'Secure payment powered by Stripe',
       amount: 'Amount',
       forKg: 'for',
       kg: 'kg',
       basePrice: 'Base Price',
       serviceFee: 'Service Fee',
       totalAmount: 'Total Amount',
-      personalInfo: 'Personal Information',
+      personalInfo: 'Billing Information',
       fullName: 'Full Name',
-      email: 'Email',
+      email: 'Email Address',
       cardInfo: 'Card Information',
-      cardNumber: 'Card Number',
-      expiryDate: 'Expiry Date (MM/YY)',
-      cvv: 'CVV',
-      payNow: 'Pay Now',
+      payNow: 'Pay',
       cancel: 'Cancel',
       fillAllFields: 'Please fill all fields',
       invalidEmail: 'Please enter a valid email',
-      invalidCard: 'Please enter a valid card number',
-      invalidExpiry: 'Please enter a valid expiry date (MM/YY)',
-      invalidCvv: 'Please enter a valid CVV',
+      processing: 'Processing payment...',
+      paymentSheetReady: 'Tap to pay securely',
+      initializingPayment: 'Setting up secure payment...',
+      applePayGoogle: 'Or pay with',
+      cardPayment: 'Pay with Card',
+      payWithCard: 'Pay with Card',
     },
     fr: {
-      paymentDetails: 'Détails du Paiement',
+      paymentDetails: 'Finaliser le Paiement',
+      securePayment: 'Paiement sécurisé par Stripe',
       amount: 'Montant',
       forKg: 'pour',
       kg: 'kg',
       basePrice: 'Prix de Base',
       serviceFee: 'Frais de Service',
       totalAmount: 'Montant Total',
-      personalInfo: 'Informations Personnelles',
+      personalInfo: 'Informations de Facturation',
       fullName: 'Nom Complet',
-      email: 'Email',
+      email: 'Adresse Email',
       cardInfo: 'Informations de Carte',
-      cardNumber: 'Numéro de Carte',
-      expiryDate: 'Date d\'Expiration (MM/AA)',
-      cvv: 'CVV',
-      payNow: 'Payer Maintenant',
+      payNow: 'Payer',
       cancel: 'Annuler',
       fillAllFields: 'Veuillez remplir tous les champs',
       invalidEmail: 'Veuillez entrer un email valide',
-      invalidCard: 'Veuillez entrer un numéro de carte valide',
-      invalidExpiry: 'Veuillez entrer une date d\'expiration valide (MM/AA)',
-      invalidCvv: 'Veuillez entrer un CVV valide',
+      processing: 'Traitement du paiement...',
+      paymentSheetReady: 'Appuyez pour payer en toute sécurité',
+      initializingPayment: 'Configuration du paiement sécurisé...',
+      applePayGoogle: 'Ou payer avec',
+      cardPayment: 'Payer par Carte',
+      payWithCard: 'Payer par Carte',
     },
   };
 
   const text = translations[language];
 
+  // Animate modal on open
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 65,
+          friction: 11,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      fadeAnim.setValue(0);
+      slideAnim.setValue(50);
+    }
+  }, [visible]);
+
   const validateEmail = (email) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
-  const handleSubmit = async () => {
-    // Validation
+  // Handle native Payment Sheet
+  const handleNativePayment = async () => {
+    if (!fullName || !email) {
+      Alert.alert('Error', text.fillAllFields);
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      Alert.alert('Error', text.invalidEmail);
+      return;
+    }
+
+    if (!cardComplete) {
+      Alert.alert('Error', 'Please enter valid card details');
+      return;
+    }
+
+    if (!paymentRequest?.clientSecret) {
+      Alert.alert('Error', 'Payment setup failed. Please try again.');
+      return;
+    }
+
+    setLoading(true);
+    console.log('Confirming payment with card...');
+
+    try {
+      // Build payment method params - Android needs explicit card type
+      const paymentMethodParams = {
+        paymentMethodType: 'Card',
+        paymentMethodData: {
+          billingDetails: {
+            name: fullName,
+            email: email,
+          },
+        },
+      };
+
+      console.log('Platform:', Platform.OS, 'Card complete:', cardComplete);
+
+      const { error, paymentIntent } = await confirmPayment(
+        paymentRequest.clientSecret,
+        paymentMethodParams
+      );
+
+      if (error) {
+        console.error('Payment error:', error);
+        Alert.alert('Payment Failed', error.message);
+        setLoading(false);
+        return;
+      }
+
+      // Payment successful
+      console.log('Payment successful!', paymentIntent);
+
+      // Reset form first to prevent state issues
+      const paymentData = {
+        fullName,
+        email,
+        amount: paymentRequest.amount,
+        kg: paymentRequest.kg,
+        offerId: paymentRequest.offerId,
+        travelerId: paymentRequest.travelerId,
+        senderId: paymentRequest.senderId,
+        paymentIntentId: paymentIntent?.id || paymentRequest.paymentIntentId,
+      };
+
+      setFullName('');
+      setEmail('');
+      setCardComplete(false);
+      setCardDetails(null);
+      setLoading(false);
+
+      // Call the callback after resetting state
+      try {
+        await onProcessPayment(paymentData);
+      } catch (callbackError) {
+        console.error('Callback error:', callbackError);
+        // Payment was successful, callback failed - don't show error to user
+      }
+      return;
+    } catch (error) {
+      console.error('Payment error:', error);
+      Alert.alert('Error', 'Payment processing failed. Please try again.');
+      setLoading(false);
+    }
+  };
+
+  // Handle web payment
+  const handleWebPayment = async () => {
     if (!fullName || !email) {
       Alert.alert('Error', text.fillAllFields);
       return;
@@ -132,14 +263,10 @@ export default function PaymentModal({
     setLoading(true);
 
     try {
-      let paymentIntent;
-      let error;
-
-      if (Platform.OS === 'web') {
-        // Web: Use Stripe.js confirmCardPayment
-        const cardElement = elements.getElement(CardElement);
-
-        const result = await stripe.confirmCardPayment(paymentRequest.clientSecret, {
+      const cardElement = elements.getElement(CardElement);
+      const { error, paymentIntent } = await stripe.confirmCardPayment(
+        paymentRequest.clientSecret,
+        {
           payment_method: {
             card: cardElement,
             billing_details: {
@@ -147,35 +274,18 @@ export default function PaymentModal({
               email: email,
             },
           },
-        });
-
-        error = result.error;
-        paymentIntent = result.paymentIntent;
-      } else {
-        // Native: Use Stripe React Native confirmPayment
-        const result = await stripe.confirmPayment(paymentRequest.clientSecret, {
-          paymentMethodType: 'Card',
-          paymentMethodData: {
-            billingDetails: {
-              name: fullName,
-              email: email,
-            },
-          },
-        });
-
-        error = result.error;
-        paymentIntent = result.paymentIntent;
-      }
+        }
+      );
 
       if (error) {
-        console.error('Payment confirmation error:', error);
+        console.error('Payment error:', error);
         Alert.alert('Payment Failed', error.message);
         setLoading(false);
         return;
       }
 
       if (paymentIntent && paymentIntent.status === 'succeeded') {
-        // Payment successful - call the backend to update the database
+        console.log('Payment successful:', paymentIntent);
         await onProcessPayment({
           fullName,
           email,
@@ -200,156 +310,182 @@ export default function PaymentModal({
     }
   };
 
+  const handleSubmit = () => {
+    console.log('handleSubmit called, Platform:', Platform.OS);
+    if (Platform.OS === 'web') {
+      handleWebPayment();
+    } else {
+      handleNativePayment();
+    }
+  };
+
+  const handleClose = () => {
+    if (!loading) {
+      setFullName('');
+      setEmail('');
+      setCardComplete(false);
+      setCardDetails(null);
+      onClose();
+    }
+  };
+
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="none"
       transparent={true}
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.modalTitle}>{text.paymentDetails}</Text>
+      <Animated.View style={[styles.modalOverlay, { opacity: fadeAnim }]}>
+        <Animated.View
+          style={[
+            styles.modalContent,
+            { transform: [{ translateY: slideAnim }] }
+          ]}
+        >
+          <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+            {/* Header */}
+            <View style={styles.headerContainer}>
+              <Text style={styles.modalTitle}>{text.paymentDetails}</Text>
+              <View style={styles.secureRow}>
+                <Text style={styles.lockIcon}>🔒</Text>
+                <Text style={styles.secureText}>{text.securePayment}</Text>
+              </View>
+            </View>
 
-            {/* Amount Summary with Fee Breakdown */}
-            {feeBreakdown ? (
-              <View style={styles.amountCard}>
-                <Text style={styles.amountLabel}>{text.forKg} {paymentRequest?.kg}{text.kg}</Text>
+            {/* Amount Summary Card removed as requested */}
 
-                {/* Fee Breakdown */}
-                <View style={styles.feeBreakdown}>
-                  <View style={styles.feeRow}>
-                    <Text style={styles.feeLabel}>{text.basePrice}</Text>
-                    <Text style={styles.feeValue}>{formatCurrency(feeBreakdown.basePrice)}</Text>
-                  </View>
-                  <View style={styles.feeRow}>
-                    <Text style={styles.feeLabel}>{getServiceFeeDescription(feeBreakdown.kg)}</Text>
-                    <Text style={styles.feeValue}>{formatCurrency(feeBreakdown.serviceFee)}</Text>
-                  </View>
-                  <View style={styles.feeDivider} />
-                  <View style={styles.feeRow}>
-                    <Text style={styles.feeLabelTotal}>{text.totalAmount}</Text>
-                    <Text style={styles.feeValueTotal}>{formatCurrency(feeBreakdown.senderTotal)}</Text>
-                  </View>
+            {/* Billing Info & Card Element */}
+            <>
+                {/* Billing Information */}
+                <Text style={styles.sectionTitle}>{text.personalInfo}</Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{text.fullName}</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="John Doe"
+                    placeholderTextColor={theme.colors.textLight}
+                    value={fullName}
+                    onChangeText={setFullName}
+                    autoCapitalize="words"
+                    editable={!loading}
+                  />
                 </View>
-              </View>
-            ) : (
-              <View style={styles.amountCard}>
-                <Text style={styles.amountLabel}>{text.amount}</Text>
-                <Text style={styles.amountValue}>
-                  ${paymentRequest?.amount.toFixed(2)}
-                </Text>
-                <Text style={styles.kgText}>
-                  {text.forKg} {paymentRequest?.kg}{text.kg}
-                </Text>
-              </View>
-            )}
 
-            {/* Personal Information */}
-            <Text style={styles.sectionTitle}>{text.personalInfo}</Text>
-            
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>{text.fullName}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="John Doe"
-                placeholderTextColor={theme.colors.textLight}
-                value={fullName}
-                onChangeText={setFullName}
-                autoCapitalize="words"
-              />
-            </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{text.email}</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="john@example.com"
+                    placeholderTextColor={theme.colors.textLight}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    editable={!loading}
+                  />
+                </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>{text.email}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="john@example.com"
-                placeholderTextColor={theme.colors.textLight}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
+                {/* Card Element */}
+                <Text style={styles.sectionTitle}>{text.cardInfo}</Text>
 
-            {/* Card Information */}
-            <Text style={styles.sectionTitle}>{text.cardInfo}</Text>
-
-            {Platform.OS === 'web' ? (
-              <View style={styles.cardFieldContainer}>
-                <CardElement
-                  options={{
-                    style: {
-                      base: {
-                        fontSize: '16px',
-                        color: theme.colors.text,
-                        '::placeholder': {
-                          color: theme.colors.textLight,
+                {Platform.OS === 'web' ? (
+                  <View style={styles.cardFieldContainer}>
+                    <CardElement
+                      options={{
+                        style: {
+                          base: {
+                            fontSize: '16px',
+                            color: '#1A1A1A',
+                            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                            '::placeholder': {
+                              color: '#999999',
+                            },
+                            iconColor: theme.colors.primary,
+                          },
+                          invalid: {
+                            color: '#EF4444',
+                            iconColor: '#EF4444',
+                          },
                         },
-                      },
-                      invalid: {
-                        color: '#fa755a',
-                      },
-                    },
-                  }}
-                  onChange={(event) => {
-                    setCardComplete(event.complete);
-                  }}
-                />
-              </View>
-            ) : (
-              <View style={styles.cardFieldContainer}>
-                <CardField
-                  postalCodeEnabled={false}
-                  placeholders={{
-                    number: '4242 4242 4242 4242',
-                  }}
-                  cardStyle={{
-                    backgroundColor: '#FFFFFF',
-                    textColor: theme.colors.text,
-                    placeholderColor: theme.colors.textLight,
-                  }}
-                  style={styles.cardField}
-                  onCardChange={(cardDetails) => {
-                    setCardComplete(cardDetails.complete);
-                  }}
-                />
-              </View>
-            )}
+                        hidePostalCode: false,
+                      }}
+                      onChange={(event) => {
+                        setCardComplete(event.complete);
+                      }}
+                    />
+                  </View>
+                ) : (
+                  <CardField
+                    postalCodeEnabled={true}
+                    placeholders={{
+                      number: '4242 4242 4242 4242',
+                    }}
+                    cardStyle={{
+                      backgroundColor: '#F5F5F5',
+                      textColor: '#1A1A1A',
+                      placeholderColor: '#999999',
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: '#E0E0E0',
+                    }}
+                    style={styles.nativeCardField}
+                    onCardChange={(details) => {
+                      setCardComplete(details.complete);
+                      setCardDetails(details); // Store the full card details for Android
+                    }}
+                  />
+                )}
 
-            <Text style={styles.testCardHint}>
-              Test card: 4242 4242 4242 4242 | Any future date | Any 3 digits
-            </Text>
+                <View style={styles.cardBrands}>
+                  <Text style={styles.cardBrandText}>Visa</Text>
+                  <Text style={styles.cardBrandText}>Mastercard</Text>
+                  <Text style={styles.cardBrandText}>Amex</Text>
+                </View>
+              </>
 
             {/* Buttons */}
             <View style={styles.buttonRow}>
               <TouchableOpacity
                 style={[styles.button, styles.cancelButton]}
-                onPress={onClose}
+                onPress={handleClose}
                 disabled={loading}
               >
                 <Text style={styles.cancelButtonText}>{text.cancel}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.button, styles.submitButton, loading && styles.buttonDisabled]}
+                style={[
+                  styles.button,
+                  styles.submitButton,
+                  loading && styles.buttonDisabled
+                ]}
                 onPress={handleSubmit}
                 disabled={loading}
               >
                 {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <View style={styles.loadingButton}>
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <Text style={styles.submitButtonText}>{text.processing}</Text>
+                  </View>
                 ) : (
                   <Text style={styles.submitButtonText}>
-                    {text.payNow}
+                    {text.payNow} ${paymentRequest?.amount?.toFixed(2) || '0.00'}
                   </Text>
                 )}
               </TouchableOpacity>
             </View>
+
+            {/* Test Card Hint (only in dev) */}
+            {__DEV__ && Platform.OS === 'web' && (
+              <Text style={styles.testCardHint}>
+                Test: 4242 4242 4242 4242 | Any future date | Any CVC | Any ZIP
+              </Text>
+            )}
           </ScrollView>
-        </View>
-      </View>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 }
@@ -357,187 +493,277 @@ export default function PaymentModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
-    width: '90%',
+    width: '92%',
+    maxWidth: 420,
     maxHeight: '90%',
-    backgroundColor: theme.colors.background,
-    borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.lg,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.25,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 10,
+      },
+      web: {
+        boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)',
+      },
+    }),
+  },
+  headerContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
   },
   modalTitle: {
-    ...theme.typography.h2,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.lg,
-    textAlign: 'center',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 8,
+  },
+  secureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  lockIcon: {
+    fontSize: 12,
+    marginRight: 4,
+  },
+  secureText: {
+    fontSize: 12,
+    color: '#666666',
   },
   amountCard: {
     backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.lg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+  },
+  amountHeader: {
     alignItems: 'center',
-    marginBottom: theme.spacing.lg,
+    marginBottom: 12,
   },
   amountLabel: {
-    ...theme.typography.caption,
+    fontSize: 14,
     color: '#FFFFFF',
     opacity: 0.9,
-    marginBottom: theme.spacing.xs,
-    fontSize: 12,
   },
-  amountValue: {
-    ...theme.typography.h1,
-    color: '#FFFFFF',
-    fontSize: 34,
-    fontWeight: 'bold',
-    marginBottom: theme.spacing.xs,
-  },
-  kgText: {
-    ...theme.typography.body,
-    color: '#FFFFFF',
-    opacity: 0.9,
-    fontSize: 14,
-  },
-  sectionTitle: {
-    ...theme.typography.h3,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.md,
-    marginTop: theme.spacing.sm,
-    fontSize: 18,
-  },
-  inputGroup: {
-    marginBottom: theme.spacing.md,
-  },
-  label: {
-    ...theme.typography.body,
-    color: theme.colors.text,
-    fontWeight: '600',
-    marginBottom: theme.spacing.xs,
-    fontSize: 14,
-  },
-  input: {
-    ...theme.typography.body,
-    backgroundColor: theme.colors.backgroundSecondary,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    paddingVertical: 14,
-    color: theme.colors.text,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    fontSize: 14,
-    minHeight: 38,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-  },
-  halfWidth: {
-    flex: 1,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    marginTop: theme.spacing.md,
-  },
-  button: {
-    flex: 1,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.borderRadius.lg,
+  simpleAmount: {
     alignItems: 'center',
   },
-  cancelButton: {
-    backgroundColor: theme.colors.backgroundSecondary,
-  },
-  cancelButtonText: {
-    ...theme.typography.button,
-    color: theme.colors.text,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  submitButton: {
-    backgroundColor: theme.colors.primary,
-  },
-  submitButtonText: {
-    ...theme.typography.button,
-    color: '#FFFFFF',
+  amountValue: {
+    fontSize: 36,
     fontWeight: '700',
-    fontSize: 14,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  cardFieldContainer: {
-    marginBottom: theme.spacing.md,
-    ...(Platform.OS === 'web' ? {
-      backgroundColor: theme.colors.backgroundSecondary,
-      borderRadius: theme.borderRadius.md,
-      padding: theme.spacing.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      minHeight: 50,
-    } : {}),
-  },
-  cardField: {
-    width: '100%',
-    height: 50,
-    marginVertical: theme.spacing.xs,
-  },
-  testCardHint: {
-    ...theme.typography.caption,
-    color: theme.colors.textSecondary,
-    fontSize: 11,
-    fontStyle: 'italic',
-    marginBottom: theme.spacing.md,
-    textAlign: 'center',
+    color: '#FFFFFF',
   },
   feeBreakdown: {
     width: '100%',
-    marginTop: theme.spacing.md,
   },
   feeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.sm,
+    marginBottom: 8,
   },
   feeLabel: {
-    ...theme.typography.body,
+    fontSize: 14,
     color: '#FFFFFF',
     opacity: 0.9,
-    fontSize: 14,
   },
   feeValue: {
-    ...theme.typography.body,
-    color: '#FFFFFF',
     fontSize: 14,
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   feeLabelTotal: {
-    ...theme.typography.body,
-    color: '#FFFFFF',
     fontSize: 16,
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   feeValueTotal: {
-    ...theme.typography.h2,
-    color: '#FFFFFF',
     fontSize: 24,
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   feeDivider: {
     height: 1,
     backgroundColor: '#FFFFFF',
     opacity: 0.3,
-    marginVertical: theme.spacing.sm,
+    marginVertical: 12,
   },
-  webNotice: {
-    ...theme.typography.body,
-    color: theme.colors.text,
+  nativePaymentContainer: {
+    marginBottom: 20,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+  },
+  loadingText: {
+    marginLeft: 12,
+    fontSize: 14,
+    color: '#666666',
+  },
+  paymentReadyContainer: {
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#22C55E',
+  },
+  paymentReadyText: {
+    fontSize: 14,
+    color: '#15803D',
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  paymentMethodsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  paymentMethodBadge: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  paymentMethodText: {
+    fontSize: 12,
+    color: '#333333',
+    fontWeight: '500',
+  },
+  errorContainer: {
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#DC2626',
+    marginBottom: 12,
     textAlign: 'center',
-    marginVertical: theme.spacing.lg,
-    lineHeight: 22,
+  },
+  retryButton: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    color: '#333333',
+    fontWeight: '500',
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: '#1A1A1A',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  cardFieldContainer: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginBottom: 12,
+    minHeight: 50,
+    justifyContent: 'center',
+  },
+  cardBrands: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginBottom: 20,
+  },
+  cardBrandText: {
+    fontSize: 12,
+    color: '#999999',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#F5F5F5',
+    flex: 0.4,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: '#666666',
+    fontWeight: '600',
+  },
+  submitButton: {
+    backgroundColor: theme.colors.primary,
+    flex: 0.6,
+  },
+  submitButtonText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  loadingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  testCardHint: {
+    fontSize: 11,
+    color: '#999999',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  nativeCardField: {
+    width: '100%',
+    height: 50,
+    marginBottom: 12,
   },
 });

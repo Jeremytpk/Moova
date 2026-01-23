@@ -1,6 +1,6 @@
 import { collection, doc, setDoc, serverTimestamp, updateDoc, getDoc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db } from '../config/firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../config/firebaseConfig';
 
 /**
  * Get or create a chat between two users
@@ -145,11 +145,12 @@ export const markChatAsRead = async (userId, chatId) => {
  * @param {string} currentUserId - Traveler's user ID (sender of payment request)
  * @param {string} otherUserId - Sender's user ID (receiver of payment request)
  * @param {number} kg - Amount of kg sold
- * @param {number} amount - Payment amount
+ * @param {number} amount - Payment amount (base price, before fees)
  * @param {string} offerId - Related offer ID
+ * @param {number} pricePerKg - Price per kg
  * @returns {Promise<void>}
  */
-export const sendPaymentRequest = async (chatId, currentUserId, otherUserId, kg, amount, offerId) => {
+export const sendPaymentRequest = async (chatId, currentUserId, otherUserId, kg, amount, offerId, pricePerKg) => {
   try {
     console.log('Sending payment request in chat:', chatId);
     
@@ -164,6 +165,7 @@ export const sendPaymentRequest = async (chatId, currentUserId, otherUserId, kg,
       paymentData: {
         kg: kg,
         amount: amount,
+        pricePerKg: pricePerKg,
         offerId: offerId,
         status: 'pending', // pending, paid, failed
         createdAt: serverTimestamp(),
@@ -208,7 +210,36 @@ export const sendPaymentRequest = async (chatId, currentUserId, otherUserId, kg,
 };
 
 /**
- * Create Payment Intent with Stripe
+ * Create Payment Sheet parameters with Stripe
+ * Returns all data needed for Payment Sheet (clientSecret, ephemeralKey, customer)
+ * @param {object} paymentInfo - Payment information
+ * @returns {Promise<object>} - { clientSecret, ephemeralKey, customer, paymentIntentId } or null
+ */
+export const createPaymentSheet = async (paymentInfo) => {
+  try {
+    console.log('Creating payment sheet...', paymentInfo);
+
+        const createPaymentSheetFn = httpsCallable(functions, 'createPaymentSheet');
+
+    const result = await createPaymentSheetFn({
+      amount: paymentInfo.amount,
+      kg: paymentInfo.kg,
+      offerId: paymentInfo.offerId,
+      travelerId: paymentInfo.travelerId,
+      senderId: paymentInfo.senderId,
+      currency: 'usd',
+    });
+
+    console.log('Payment sheet created:', result.data);
+    return result.data; // { clientSecret, ephemeralKey, customer, paymentIntentId }
+  } catch (error) {
+    console.error('Error creating payment sheet:', error);
+    throw error;
+  }
+};
+
+/**
+ * Create Payment Intent with Stripe (legacy - for web fallback)
  * @param {object} paymentInfo - Payment information
  * @returns {Promise<object>} - { clientSecret, paymentIntentId } or null
  */
@@ -216,8 +247,7 @@ export const createPaymentIntent = async (paymentInfo) => {
   try {
     console.log('Creating payment intent...', paymentInfo);
 
-    const functions = getFunctions();
-    const createPaymentIntentFn = httpsCallable(functions, 'createPaymentIntent');
+        const createPaymentIntentFn = httpsCallable(functions, 'createPaymentIntent');
 
     const result = await createPaymentIntentFn({
       amount: paymentInfo.amount,
@@ -245,8 +275,7 @@ export const confirmPayment = async (paymentInfo) => {
   try {
     console.log('Confirming payment...', paymentInfo);
 
-    const functions = getFunctions();
-    const confirmPaymentFn = httpsCallable(functions, 'confirmPayment');
+        const confirmPaymentFn = httpsCallable(functions, 'confirmPayment');
 
     const result = await confirmPaymentFn({
       paymentIntentId: paymentInfo.paymentIntentId,

@@ -7,7 +7,7 @@
     "icon": "./assets/logoMoova.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/logoMoova.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#2563EB"
     },
@@ -16,21 +16,55 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jerttech.moova"
+      "bundleIdentifier": "com.jerttech.moova",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logoMoova.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#2563EB"
       },
       "package": "com.jerttech.moova",
-      "permissions": [
-        "DETECT_SCREEN_CAPTURE"
-      ]
+      "permissions": [],
+      "googleServicesFile": "./google-services.json",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
+      "bundler": "metro",
       "favicon": "./assets/logoMoova.png"
     },
-    "platforms": ["ios", "android", "web"]
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "plugins": [
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.jerttech.moova",
+          "enableGooglePay": true
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "35840ad7-6206-47cd-8d73-d6f6e6c34835"
+      }
+    },
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/35840ad7-6206-47cd-8d73-d6f6e6c34835",
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    }
   }
 }

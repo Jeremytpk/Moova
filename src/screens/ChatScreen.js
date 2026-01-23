@@ -16,10 +16,12 @@ import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc } from '
 import { db, auth } from '../config/firebaseConfig';
 import theme from '../theme';
 import { useLanguage } from '../contexts/LanguageContext';
-import { getOrCreateChat, sendMessage as sendChatMessage, sendPaymentRequest, createPaymentIntent, confirmPayment } from '../utils/chatHelpers';
+import { getOrCreateChat, sendMessage as sendChatMessage, sendPaymentRequest, createPaymentIntent, createPaymentSheet, confirmPayment } from '../utils/chatHelpers';
 import SellKgModal from '../components/SellKgModal';
 import PaymentResultModal from '../components/PaymentResultModal';
 import PaymentModal from '../components/PaymentModal';
+import PaymentDetails from '../components/PaymentDetails';
+import PaymentProcessingModal from '../components/PaymentProcessingModal';
 
 /**
  * ChatScreen
@@ -36,6 +38,8 @@ export default function ChatScreen({ route, navigation }) {
   const [offer, setOffer] = useState(null);
   const [showSellKgModal, setShowSellKgModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
+  // Removed showProcessingModal state
+  const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showEditPaymentModal, setShowEditPaymentModal] = useState(false);
   const [editingPaymentMessage, setEditingPaymentMessage] = useState(null);
@@ -196,7 +200,7 @@ export default function ChatScreen({ route, navigation }) {
     if (!currentUser || !chatId) return;
 
     try {
-      await sendPaymentRequest(chatId, currentUser.uid, otherUserId, kg, amount, offerId);
+      await sendPaymentRequest(chatId, currentUser.uid, otherUserId, kg, amount, offerId, offer?.pricePerKg);
       
       // Scroll to bottom after sending
       setTimeout(() => {
@@ -208,29 +212,58 @@ export default function ChatScreen({ route, navigation }) {
     }
   };
 
-  const handlePayNow = async (paymentData) => {
+  // Show payment details first (fee breakdown)
+  const handlePayNow = (paymentData) => {
+    setSelectedPaymentRequest(paymentData);
+    setShowPaymentDetails(true);
+  };
+
+  // Called when user clicks "Continue" in PaymentDetails
+  const handleContinueToPayment = async (totalAmount) => {
+    setShowPaymentDetails(false);
+
+    if (!selectedPaymentRequest) return;
+
     try {
-      // Set the selected payment request
-      setSelectedPaymentRequest(paymentData);
+      let paymentSetupData;
 
-      // Create payment intent with Stripe
-      const intentData = await createPaymentIntent({
-        amount: paymentData.amount,
-        kg: paymentData.kg,
-        offerId: offerId,
-        travelerId: otherUserId,
-      });
+      // Use Payment Sheet for native, Payment Intent for web
+      if (Platform.OS !== 'web') {
+        // Native: Create Payment Sheet (includes customer, ephemeralKey)
+        paymentSetupData = await createPaymentSheet({
+          amount: totalAmount,
+          kg: selectedPaymentRequest.kg,
+          offerId: offerId,
+          travelerId: otherUserId,
+          senderId: currentUser?.uid,
+        });
 
-      if (!intentData || !intentData.clientSecret) {
-        Alert.alert('Error', 'Failed to initialize payment. Please try again.');
-        return;
+        if (!paymentSetupData || !paymentSetupData.clientSecret || !paymentSetupData.customer) {
+          Alert.alert('Error', 'Failed to initialize payment. Please try again.');
+          return;
+        }
+      } else {
+        // Web: Create Payment Intent (simpler flow)
+        paymentSetupData = await createPaymentIntent({
+          amount: totalAmount,
+          kg: selectedPaymentRequest.kg,
+          offerId: offerId,
+          travelerId: otherUserId,
+        });
+
+        if (!paymentSetupData || !paymentSetupData.clientSecret) {
+          Alert.alert('Error', 'Failed to initialize payment. Please try again.');
+          return;
+        }
       }
 
-      // Store payment intent data and show payment modal
+      // Store payment data and show payment modal
       setPaymentIntentData({
-        ...intentData,
-        amount: paymentData.amount,
-        kg: paymentData.kg,
+        ...paymentSetupData,
+        amount: totalAmount, // This is the total from PaymentDetails
+        baseAmount: selectedPaymentRequest.amount, // The base price before fees
+        kg: selectedPaymentRequest.kg,
+        pricePerKg: selectedPaymentRequest.pricePerKg || offer?.pricePerKg,
         offerId: offerId,
         travelerId: otherUserId,
         senderId: currentUser?.uid,
@@ -244,7 +277,11 @@ export default function ChatScreen({ route, navigation }) {
 
   const handleProcessPayment = async (paymentInfo) => {
     try {
-      // Confirm payment with backend
+      setShowPaymentModal(false);
+
+      console.log('Processing payment confirmation...', paymentInfo);
+
+      // Directly confirm payment with backend (no processing modal)
       const success = await confirmPayment({
         paymentIntentId: paymentInfo.paymentIntentId,
         offerId: paymentInfo.offerId,
@@ -255,20 +292,25 @@ export default function ChatScreen({ route, navigation }) {
         email: paymentInfo.email,
       });
 
-      setShowPaymentModal(false);
+      console.log('Payment confirmation result:', success);
+
       setPaymentSuccess(success);
       setShowResultModal(true);
 
       if (success) {
         // Reload offer to get updated capacity
-        const offerDoc = await getDoc(doc(db, 'offers', offerId));
-        if (offerDoc.exists()) {
-          setOffer({ id: offerDoc.id, ...offerDoc.data() });
+        try {
+          const offerDoc = await getDoc(doc(db, 'offers', offerId));
+          if (offerDoc.exists()) {
+            setOffer({ id: offerDoc.id, ...offerDoc.data() });
+          }
+        } catch (offerError) {
+          console.error('Error reloading offer:', offerError);
+          // Don't fail the whole process just because offer reload failed
         }
       }
     } catch (error) {
       console.error('Payment confirmation error:', error);
-      setShowPaymentModal(false);
       setPaymentSuccess(false);
       setShowResultModal(true);
     }
@@ -665,6 +707,14 @@ export default function ChatScreen({ route, navigation }) {
           onSendPaymentRequest={handleSendPaymentRequest}
         />
       )}
+
+      <PaymentDetails
+        visible={showPaymentDetails}
+        onClose={() => setShowPaymentDetails(false)}
+        onContinue={handleContinueToPayment}
+        kg={selectedPaymentRequest?.kg}
+        baseAmount={selectedPaymentRequest?.amount}
+      />
 
       <PaymentModal
         visible={showPaymentModal}
