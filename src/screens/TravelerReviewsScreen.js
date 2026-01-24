@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
-import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../config/firebaseConfig';
+import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { db, auth } from '../config/firebaseConfig';
 import theme from '../theme';
 import Loading from '../components/Loading';
 import { ProfileIcon } from '../components/Icons';
@@ -20,6 +20,8 @@ export default function TravelerReviewsScreen({ route, navigation }) {
   const [reviewComment, setReviewComment] = useState('');
   const [reviewRating, setReviewRating] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   const { language } = useLanguage();
 
   const translations = {
@@ -32,6 +34,8 @@ export default function TravelerReviewsScreen({ route, navigation }) {
       basedOn: 'Based on',
       review: 'review',
       reviewsPlural: 'reviews',
+      showUsername: 'Show my username',
+      anonymous: 'Anonymous',
     },
     fr: {
       reviews: 'Avis',
@@ -42,10 +46,40 @@ export default function TravelerReviewsScreen({ route, navigation }) {
       basedOn: 'Basé sur',
       review: 'avis',
       reviewsPlural: 'avis',
+      showUsername: 'Afficher mon nom',
+      anonymous: 'Anonyme',
     },
   };
 
   const text = translations[language];
+
+  // Load current user info
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            setCurrentUser({
+              uid: user.uid,
+              username: userDoc.data().username || userDoc.data().name || user.displayName || 'User',
+              photoURL: userDoc.data().photoURL || user.photoURL || '',
+            });
+          } else {
+            setCurrentUser({
+              uid: user.uid,
+              username: user.displayName || 'User',
+              photoURL: user.photoURL || '',
+            });
+          }
+        } catch (error) {
+          console.error('Error loading user:', error);
+        }
+      }
+    };
+    loadCurrentUser();
+  }, []);
 
   useEffect(() => {
     loadReviews();
@@ -104,10 +138,16 @@ export default function TravelerReviewsScreen({ route, navigation }) {
     }
     setSubmitting(true);
     try {
+      // Determine reviewer name and photo based on anonymous toggle
+      const reviewerName = isAnonymous ? text.anonymous : (currentUser?.username || text.anonymous);
+      const reviewerPhotoURL = isAnonymous ? '' : (currentUser?.photoURL || '');
+
       await addDoc(collection(db, 'reviews'), {
         travelerId: userId,
-        reviewerName: 'Anonymous', // Replace with actual user name if available
-        reviewerPhotoURL: '', // Replace with actual user photo if available
+        reviewerId: currentUser?.uid || null,
+        reviewerName,
+        reviewerPhotoURL,
+        isAnonymous,
         rating: reviewRating,
         comment: reviewComment,
         createdAt: serverTimestamp(),
@@ -115,6 +155,7 @@ export default function TravelerReviewsScreen({ route, navigation }) {
       setShowReviewModal(false);
       setReviewComment('');
       setReviewRating(0);
+      setIsAnonymous(false);
       loadReviews();
       Alert.alert(language === 'en' ? 'Review submitted!' : 'Avis envoyé !');
     } catch (error) {
@@ -151,31 +192,36 @@ export default function TravelerReviewsScreen({ route, navigation }) {
     });
   };
 
-  const renderReviewItem = ({ item }) => (
-    <View style={styles.reviewCard}>
-      <View style={styles.reviewHeader}>
-        <View style={styles.reviewerInfo}>
-          {item.reviewerPhotoURL ? (
-            <Image source={{ uri: item.reviewerPhotoURL }} style={styles.reviewerAvatar} />
-          ) : (
-            <View style={styles.reviewerAvatarPlaceholder}>
-              <ProfileIcon size={24} color={theme.colors.primary} />
+  const renderReviewItem = ({ item }) => {
+    const displayName = item.isAnonymous ? text.anonymous : (item.reviewerName || text.anonymous);
+    const showPhoto = !item.isAnonymous && item.reviewerPhotoURL;
+
+    return (
+      <View style={styles.reviewCard}>
+        <View style={styles.reviewHeader}>
+          <View style={styles.reviewerInfo}>
+            {showPhoto ? (
+              <Image source={{ uri: item.reviewerPhotoURL }} style={styles.reviewerAvatar} />
+            ) : (
+              <View style={styles.reviewerAvatarPlaceholder}>
+                <ProfileIcon size={24} color={theme.colors.primary} />
+              </View>
+            )}
+            <View style={styles.reviewerDetails}>
+              <Text style={styles.reviewerName}>{displayName}</Text>
+              <Text style={styles.reviewDate}>{formatDate(item.createdAt)}</Text>
             </View>
-          )}
-          <View style={styles.reviewerDetails}>
-            <Text style={styles.reviewerName}>{item.reviewerName || 'Anonymous'}</Text>
-            <Text style={styles.reviewDate}>{formatDate(item.createdAt)}</Text>
+          </View>
+          <View style={styles.ratingStars}>
+            {renderStars(item.rating)}
           </View>
         </View>
-        <View style={styles.ratingStars}>
-          {renderStars(item.rating)}
-        </View>
+        {item.comment && (
+          <Text style={styles.reviewComment}>{item.comment}</Text>
+        )}
       </View>
-      {item.comment && (
-        <Text style={styles.reviewComment}>{item.comment}</Text>
-      )}
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return <Loading fullScreen />;
@@ -246,6 +292,39 @@ export default function TravelerReviewsScreen({ route, navigation }) {
               multiline
               maxLength={500}
             />
+            {/* Anonymous Toggle */}
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingVertical: 8 }}
+              onPress={() => setIsAnonymous(!isAnonymous)}
+            >
+              <Text style={{ fontSize: 15, color: theme.colors.text, flex: 1 }}>{text.showUsername}</Text>
+              <View style={{
+                width: 50,
+                height: 28,
+                borderRadius: 14,
+                backgroundColor: !isAnonymous ? theme.colors.success : theme.colors.border,
+                justifyContent: 'center',
+                padding: 2,
+              }}>
+                <View style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 12,
+                  backgroundColor: 'white',
+                  alignSelf: !isAnonymous ? 'flex-end' : 'flex-start',
+                }} />
+              </View>
+            </TouchableOpacity>
+            {!isAnonymous && currentUser?.username && (
+              <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginBottom: 12, textAlign: 'center' }}>
+                {language === 'en' ? 'Your name will appear as:' : 'Votre nom apparaîtra comme :'} <Text style={{ fontWeight: '600', color: theme.colors.text }}>{currentUser.username}</Text>
+              </Text>
+            )}
+            {isAnonymous && (
+              <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginBottom: 12, textAlign: 'center' }}>
+                {language === 'en' ? 'Your review will be posted anonymously' : 'Votre avis sera publié de manière anonyme'}
+              </Text>
+            )}
             <TouchableOpacity
               style={{ backgroundColor: theme.colors.primary, borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginBottom: 8 }}
               onPress={handleSubmitReview}

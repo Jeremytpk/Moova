@@ -135,14 +135,16 @@ export default function ChatsListScreen({ navigation }) {
       console.log('=== DISPLAYING CHATS ===');
       console.log('Total:', chatsData.length);
 
-      // Sort by last message time
-      chatsData.sort((a, b) => {
+      // Filter out empty chats and sort by last message time
+      const filteredChats = chatsData.filter(chat => chat.lastMessageText);
+      
+      filteredChats.sort((a, b) => {
         const aTime = a.lastMessageTime?.toMillis ? a.lastMessageTime.toMillis() : 0;
         const bTime = b.lastMessageTime?.toMillis ? b.lastMessageTime.toMillis() : 0;
         return bTime - aTime;
       });
 
-      setChats(chatsData);
+      setChats(filteredChats);
       setLoading(false);
       setRefreshing(false);
     } catch (error) {

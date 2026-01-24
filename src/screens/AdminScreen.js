@@ -294,6 +294,21 @@ export default function AdminScreen({ navigation }) {
             />
           </View>
 
+          {/* Manage Banners Card */}
+          <TouchableOpacity
+            style={styles.manageBannersCard}
+            onPress={() => navigation.navigate('AdminBanners')}
+          >
+            <View style={styles.manageBannersContent}>
+              <Text style={styles.manageBannersIcon}>📢</Text>
+              <View style={styles.manageBannersText}>
+                <Text style={styles.manageBannersTitle}>Manage Banners</Text>
+                <Text style={styles.manageBannersSubtitle}>Add, edit or remove ad banners</Text>
+              </View>
+            </View>
+            <ArrowRightIcon size={20} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+
           {/* Revenue Card */}
           <View style={styles.revenueCard}>
             <Text style={styles.revenueLabel}>Platform Revenue (8% Commission)</Text>
@@ -773,6 +788,39 @@ const styles = StyleSheet.create({
   paymentMethod: {
     fontSize: 13,
     color: theme.colors.primary,
+    marginTop: 2,
+  },
+  manageBannersCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: theme.colors.background,
+    borderRadius: 16,
+    padding: 16,
+    ...theme.shadows.sm,
+  },
+  manageBannersContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  manageBannersIcon: {
+    fontSize: 28,
+    marginRight: 14,
+  },
+  manageBannersText: {
+    flex: 1,
+  },
+  manageBannersTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  manageBannersSubtitle: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
     marginTop: 2,
   },
 });

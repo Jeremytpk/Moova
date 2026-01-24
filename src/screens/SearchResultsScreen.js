@@ -19,6 +19,7 @@ import theme from '../theme';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import Loading from '../components/Loading';
+import AutoSwipeBanner from '../components/AutoSwipeBanner';
 import { SearchIcon, CloseIcon, LocationIcon, EmptyMailboxIcon, SearchNotFoundIcon, FilterIcon, ProfileIcon, RefreshIcon } from '../components/Icons';
 import { useLanguage } from '../contexts/LanguageContext';
 import { navigate as rootNavigate } from '../RootNavigation';
@@ -656,18 +657,18 @@ export default function SearchResultsScreen({ navigation }) {
         )}
       </View>
 
+      {/* Auto-swipe Banner - only shows when there are active banners in Firestore */}
+      <AutoSwipeBanner
+        height={80}
+        navigation={navigation}
+      />
+
       {/* Filter Tabs */}
       <View style={styles.filterSection}>
         <View style={styles.sectionTitleContainer}>
           <Text style={styles.sectionTitle}>
             {text.availableRoutes}
           </Text>
-          <TouchableOpacity
-            style={styles.filterIconButton}
-            onPress={() => setFilterModalVisible(true)}
-          >
-            <FilterIcon size={22} color={cityFilter || filter !== 'all' ? theme.colors.success : theme.colors.primary} />
-          </TouchableOpacity>
         </View>
         {/* Filter buttons hidden - will be used later */}
         {/* <View style={styles.filterContainer}>

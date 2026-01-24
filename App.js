@@ -1,5 +1,6 @@
 import ProfileDetailsScreen from './src/screens/ProfileDetailsScreen';
 import AdminScreen from './src/screens/AdminScreen';
+import AdminBannersScreen from './src/screens/AdminBannersScreen';
 import UserDetailsScreen from './src/screens/UserDetailsScreen';
 import UserOffersScreen from './src/screens/UserOffersScreen';
 import UserShipmentsScreen from './src/screens/UserShipmentsScreen';
@@ -55,6 +56,7 @@ import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
 import TermsConditionsScreen from './src/screens/TermsConditionsScreen';
 import LanguageSelectionScreen from './src/screens/LanguageSelectionScreen';
 import TravelerReviewsScreen from './src/screens/TravelerReviewsScreen';
+import MoovaWebsiteScreen from './src/screens/MoovaWebsiteScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -111,8 +113,8 @@ function AppNavigator() {
   const localNavigationRef = React.useRef();
 
   const headerTitles = {
-    en: { offerDetails: 'Offer Details', chat: 'Chat', signIn: 'Sign In', createOffer: 'Create New Offer', setupTraveler: 'Traveler Setup', reviews: 'Reviews', privacyPolicy: 'Privacy Policy', termsConditions: 'Terms & Conditions' },
-    fr: { offerDetails: 'Détails de l\'Offre', chat: 'Discussion', signIn: 'Se Connecter', createOffer: 'Créer une Nouvelle Offre', setupTraveler: 'Configuration Voyageur', reviews: 'Avis', privacyPolicy: 'Politique de Confidentialité', termsConditions: 'Conditions Générales' },
+    en: { offerDetails: 'Offer Details', chat: 'Chat', signIn: 'Sign In', createOffer: 'Create New Offer', setupTraveler: 'Traveler Setup', reviews: 'Reviews', privacyPolicy: 'Privacy Policy', termsConditions: 'Terms & Conditions', aboutMoova: 'About Moova' },
+    fr: { offerDetails: 'Détails de l\'Offre', chat: 'Discussion', signIn: 'Se Connecter', createOffer: 'Créer une Nouvelle Offre', setupTraveler: 'Configuration Voyageur', reviews: 'Avis', privacyPolicy: 'Politique de Confidentialité', termsConditions: 'Conditions Générales', aboutMoova: 'À propos de Moova' },
   };
   const titles = headerTitles[language];
 
@@ -131,6 +133,41 @@ function AppNavigator() {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    // Skip on web - notifications don't work on web
+    if (Platform.OS === 'web') {
+      return;
+    }
+
+    const subscription = addNotificationResponseListener(response => {
+      const data = response.notification.request.content.data;
+
+      if (localNavigationRef.current) {
+        if (data.type === 'new_offer' && data.offerId) {
+          // Navigate to offer details
+          localNavigationRef.current.navigate('OfferDetails', {
+            offerId: data.offerId,
+          });
+        } else if (data.type === 'new_message' && data.chatId) {
+          // Navigate to chat
+          localNavigationRef.current.navigate('Chat', {
+            chatId: data.chatId,
+            otherUserId: data.otherUserId,
+            otherUserName: data.otherUserName,
+            offerId: data.offerId,
+          });
+        } else if (data.type === 'new_review' && data.travelerId) {
+          // Navigate to traveler reviews
+          localNavigationRef.current.navigate('TravelerReviews', {
+            travelerId: data.travelerId,
+          });
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
   return (
     <NavigationContainer ref={navigationRef} onReady={() => { localNavigationRef.current = navigationRef.current; flushNavigationQueue(); }}>
       <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: theme.colors.background }, headerTintColor: theme.colors.text, headerBackTitleVisible: false }}>
@@ -146,6 +183,7 @@ function AppNavigator() {
             <Stack.Screen name="UserOffers" component={UserOffersScreen} options={{ title: 'User Offers' }} />
             <Stack.Screen name="UserShipments" component={UserShipmentsScreen} options={{ title: 'User Shipments' }} />
             <Stack.Screen name="UserPayouts" component={UserPayoutsScreen} options={{ title: 'User Payouts' }} />
+            <Stack.Screen name="AdminBanners" component={AdminBannersScreen} options={{ title: 'Manage Banners' }} />
           </>
         )}
         <Stack.Screen name="OfferDetails" component={OfferDetailsScreen} options={{ title: titles.offerDetails }} />
@@ -165,6 +203,7 @@ function AppNavigator() {
         <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
         <Stack.Screen name="ProfileDetailsScreen" component={ProfileDetailsScreen} options={{ title: 'Profile Details' }} />
         <Stack.Screen name="TravelerReviews" component={TravelerReviewsScreen} options={{ title: titles.reviews }} />
+        <Stack.Screen name="MoovaWebsite" component={MoovaWebsiteScreen} options={{ title: titles.aboutMoova }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

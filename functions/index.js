@@ -700,3 +700,47 @@ exports.onMessageCreated = onDocumentCreated(
     }
   }
 );
+
+/**
+ * Firestore Trigger: Send notification when a new review is created
+ */
+exports.onReviewCreated = onDocumentCreated('reviews/{reviewId}', async (event) => {
+  try {
+    const reviewData = event.data.data();
+    const { travelerId, rating, comment, senderName } = reviewData;
+
+    console.log('New review created:', event.params.reviewId, reviewData);
+
+    // Get the traveler's push token
+    const db = admin.firestore();
+    const userDoc = await db.collection('users').doc(travelerId).get();
+
+    if (!userDoc.exists) {
+      console.log('Traveler not found');
+      return;
+    }
+
+    const userData = userDoc.data();
+    const pushToken = userData.expoPushToken;
+
+    if (!pushToken) {
+      console.log('Traveler does not have a push token');
+      return;
+    }
+
+    // Send notification
+    await sendPushNotifications([pushToken], {
+      title: '🌟 You have a new review!',
+      body: `${senderName} left you a ${rating}-star review: "${comment}"`,
+      data: {
+        type: 'new_review',
+        travelerId: travelerId,
+      },
+      channelId: 'reviews',
+    });
+
+    console.log(`Sent new review notification to traveler ${travelerId}`);
+  } catch (error) {
+    console.error('Error sending new review notification:', error);
+  }
+});

@@ -91,6 +91,13 @@ export async function registerForPushNotifications(userId) {
         vibrationPattern: [0, 250],
         lightColor: '#00FF80',
       });
+
+      await Notifications.setNotificationChannelAsync('reviews', {
+        name: 'New Reviews',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FFD700',
+      });
     }
 
     return token;

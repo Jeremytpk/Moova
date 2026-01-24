@@ -170,6 +170,7 @@ export default function ProfileScreen({ navigation }) {
       signUp: 'Sign Up',
       signInDescription: 'Sign in to access all features and create offers',
       viewTutorial: 'View Tutorial',
+      aboutMoova: 'About Moova',
     },
     fr: {
       appName: 'Moova',
@@ -202,6 +203,7 @@ export default function ProfileScreen({ navigation }) {
       signUp: 'S\'inscrire',
       signInDescription: 'Connectez-vous pour accéder à toutes les fonctionnalités',
       viewTutorial: 'Voir le Tutoriel',
+      aboutMoova: 'À propos de Moova',
     }
   };
 
@@ -548,6 +550,16 @@ export default function ProfileScreen({ navigation }) {
               <SheetIcon size={20} color={theme.colors.primary} />
             </View>
             <Text style={styles.actionText}>{text.termsConditions}</Text>
+            <ArrowRightIcon size={20} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={() => navigation.navigate('MoovaWebsite')}
+          >
+            <View style={styles.actionIconContainer}>
+              <BookIcon size={20} color={theme.colors.primary} />
+            </View>
+            <Text style={styles.actionText}>{text.aboutMoova}</Text>
             <ArrowRightIcon size={20} color={theme.colors.textSecondary} />
           </TouchableOpacity>
         </View>
