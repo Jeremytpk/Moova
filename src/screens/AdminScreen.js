@@ -8,7 +8,8 @@ import {
   Alert,
   ScrollView,
   Image,
-  RefreshControl
+  RefreshControl,
+  Modal,
 } from 'react-native';
 import { getAuth } from 'firebase/auth';
 import {
@@ -18,17 +19,21 @@ import {
 } from 'firebase/firestore';
 import theme from '../theme';
 import Loading from '../components/Loading';
-import { ArrowRightIcon, PackageIcon, ShipmentIcon, ProfileIcon } from '../components/Icons';
+import { ArrowRightIcon, PackageIcon, ShipmentIcon, ProfileIcon, ChatIcon, ChevronUpIcon, ChevronDownIcon } from '../components/Icons';
+import MessagesList from './MessagesList';
 
 export default function AdminScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isMessagesModalVisible, setMessagesModalVisible] = useState(false);
+  const [isGridVisible, setIsGridVisible] = useState(true);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalTravelers: 0,
     totalOffers: 0,
     activeOffers: 0,
     totalShipments: 0,
+    totalMessages: 0,
     totalRevenue: 0,
     pendingPayouts: 0,
   });
@@ -90,6 +95,15 @@ export default function AdminScreen({ navigation }) {
       const offersList = offersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setOffers(offersList);
 
+      // Fetch messages count
+      let totalMessages = 0;
+      try {
+        const messagesSnapshot = await getDocs(collection(db, 'messages'));
+        totalMessages = messagesSnapshot.size;
+      } catch (e) {
+        // Messages collection might not exist
+      }
+
       // Calculate stats
       const totalTravelers = usersList.filter(u => u.isTraveler).length;
       const activeOffers = offersList.filter(o => o.status === 'active').length;
@@ -133,6 +147,7 @@ export default function AdminScreen({ navigation }) {
         totalOffers: offersList.length,
         activeOffers,
         totalShipments,
+        totalMessages,
         totalRevenue,
         pendingPayouts,
       });
@@ -266,48 +281,61 @@ export default function AdminScreen({ navigation }) {
       {activeTab === 'overview' && (
         <>
           {/* Stats Grid */}
-          <View style={styles.statsGrid}>
-            <StatCard
-              title="Total Users"
-              value={stats.totalUsers}
-              icon={<ProfileIcon size={24} color={theme.colors.primary} />}
-              color={theme.colors.primary}
-            />
-            <StatCard
-              title="Travelers"
-              value={stats.totalTravelers}
-              icon={<PackageIcon size={24} color={theme.colors.success} />}
-              color={theme.colors.success}
-            />
-            <StatCard
-              title="Active Offers"
-              value={stats.activeOffers}
-              subtitle={`of ${stats.totalOffers} total`}
-              icon={<PackageIcon size={24} color={theme.colors.warning} />}
-              color={theme.colors.warning}
-            />
-            <StatCard
-              title="Shipments"
-              value={stats.totalShipments}
-              icon={<ShipmentIcon size={24} color={theme.colors.error} />}
-              color={theme.colors.error}
-            />
-          </View>
-
-          {/* Manage Banners Card */}
-          <TouchableOpacity
-            style={styles.manageBannersCard}
-            onPress={() => navigation.navigate('AdminBanners')}
-          >
-            <View style={styles.manageBannersContent}>
-              <Text style={styles.manageBannersIcon}>📢</Text>
-              <View style={styles.manageBannersText}>
-                <Text style={styles.manageBannersTitle}>Manage Banners</Text>
-                <Text style={styles.manageBannersSubtitle}>Add, edit or remove ad banners</Text>
-              </View>
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Statistics</Text>
+              <TouchableOpacity onPress={() => setIsGridVisible(!isGridVisible)}>
+                {isGridVisible ? (
+                  <ChevronUpIcon size={24} color={theme.colors.textSecondary} />
+                ) : (
+                  <ChevronDownIcon size={24} color={theme.colors.textSecondary} />
+                )}
+              </TouchableOpacity>
             </View>
-            <ArrowRightIcon size={20} color={theme.colors.textSecondary} />
-          </TouchableOpacity>
+            {isGridVisible && (
+              <View style={styles.statsGrid}>
+                <StatCard
+                  title="Total Users"
+                  value={stats.totalUsers}
+                  icon={<ProfileIcon size={24} color={theme.colors.primary} />}
+                  color={theme.colors.primary}
+                />
+                <StatCard
+                  title="Travelers"
+                  value={stats.totalTravelers}
+                  icon={<PackageIcon size={24} color={theme.colors.success} />}
+                  color={theme.colors.success}
+                />
+                <StatCard
+                  title="Active Offers"
+                  value={stats.activeOffers}
+                  subtitle={`of ${stats.totalOffers} total`}
+                  icon={<PackageIcon size={24} color={theme.colors.warning} />}
+                  color={theme.colors.warning}
+                />
+                <StatCard
+                  title="Shipments"
+                  value={stats.totalShipments}
+                  icon={<ShipmentIcon size={24} color={theme.colors.error} />}
+                  color={theme.colors.error}
+                />
+                <StatCard
+                  title="Messages"
+                  value={stats.totalMessages}
+                  icon={<ChatIcon size={24} color="#8B5CF6" />}
+                  color="#8B5CF6"
+                  onPress={() => setMessagesModalVisible(true)}
+                />
+                <StatCard
+                  title="Banners"
+                  value="Manage"
+                  icon={<Text style={{ fontSize: 24 }}>📢</Text>}
+                  color={theme.colors.primary}
+                  onPress={() => navigation.navigate('AdminBanners')}
+                />
+              </View>
+            )}
+          </View>
 
           {/* Revenue Card */}
           <View style={styles.revenueCard}>
@@ -441,12 +469,22 @@ export default function AdminScreen({ navigation }) {
         </View>
       )}
 
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isMessagesModalVisible}
+        onRequestClose={() => {
+          setMessagesModalVisible(!isMessagesModalVisible);
+        }}
+      >
+        <MessagesList onClose={() => setMessagesModalVisible(false)} />
+      </Modal>
+
       <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
+ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.backgroundSecondary,
@@ -550,7 +588,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 12,
-    marginTop: 8,
   },
   statCard: {
     width: '48%',
@@ -625,7 +662,7 @@ const styles = StyleSheet.create({
   section: {
     margin: 16,
     marginTop: 8,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.backgroundSecondary,
     borderRadius: 16,
     padding: 16,
     ...theme.shadows.sm,
@@ -640,7 +677,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: theme.colors.text,
-    marginBottom: 12,
   },
   viewAllText: {
     color: theme.colors.primary,
@@ -788,39 +824,6 @@ const styles = StyleSheet.create({
   paymentMethod: {
     fontSize: 13,
     color: theme.colors.primary,
-    marginTop: 2,
-  },
-  manageBannersCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginHorizontal: 16,
-    marginBottom: 8,
-    backgroundColor: theme.colors.background,
-    borderRadius: 16,
-    padding: 16,
-    ...theme.shadows.sm,
-  },
-  manageBannersContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  manageBannersIcon: {
-    fontSize: 28,
-    marginRight: 14,
-  },
-  manageBannersText: {
-    flex: 1,
-  },
-  manageBannersTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  manageBannersSubtitle: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
     marginTop: 2,
   },
 });
