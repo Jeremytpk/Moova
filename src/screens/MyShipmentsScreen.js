@@ -32,6 +32,7 @@ export default function MyShipmentsScreen({ navigation }) {
       pending: 'Pending Pickup',
       picked_up: 'Picked Up',
       in_transit: 'In Transit',
+      arrived: 'Arrived - Ready for Pickup',
       delivered: 'Delivered',
       traveler: 'Traveler',
       paid: 'Paid',
@@ -55,6 +56,7 @@ export default function MyShipmentsScreen({ navigation }) {
       pending: 'En attente de collecte',
       picked_up: 'Collecté',
       in_transit: 'En transit',
+      arrived: 'Arrivé - Prêt pour récupération',
       delivered: 'Livré',
       traveler: 'Voyageur',
       paid: 'Payé',
@@ -99,6 +101,8 @@ export default function MyShipmentsScreen({ navigation }) {
         return '#42A5F5';
       case 'in_transit':
         return '#7E57C2';
+      case 'arrived':
+        return '#26A69A';
       case 'delivered':
         return theme.colors.success;
       default:

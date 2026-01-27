@@ -24,6 +24,8 @@ export default function TravelerDeliveriesScreen({ navigation }) {
   const [resultModal, setResultModal] = useState(null); // 'success' | 'error' | null
   const currentUser = auth.currentUser;
 
+  const [updatingStatus, setUpdatingStatus] = useState(null);
+
   // Translations
   const translations = {
     en: {
@@ -37,6 +39,7 @@ export default function TravelerDeliveriesScreen({ navigation }) {
       pending: 'Pending Pickup',
       picked_up: 'Picked Up',
       in_transit: 'In Transit',
+      arrived: 'Arrived at Destination',
       delivered: 'Delivered',
       amount: 'Amount',
       verifyDelivery: 'Verify Delivery',
@@ -49,6 +52,20 @@ export default function TravelerDeliveriesScreen({ navigation }) {
       deliverySuccessMsg: 'The package has been successfully delivered.',
       codeInstruction: 'Ask the recipient for the 6-digit verification code',
       orderNumber: 'Order #',
+      // New status action translations
+      markReceived: 'Mark as Received',
+      markOnTheWay: 'On the Way',
+      markArrived: 'Arrived at Destination',
+      receivedSuccess: 'Package Received!',
+      receivedSuccessMsg: 'The sender has been notified that you have the package.',
+      onTheWaySuccess: 'Status Updated!',
+      onTheWaySuccessMsg: 'The sender has been notified that you are on the way.',
+      arrivedSuccess: 'Arrived!',
+      arrivedSuccessMsg: 'The sender has been notified that you have arrived. They can now ask the recipient to pick up the package.',
+      confirmReceived: 'Confirm you have received this package from the sender?',
+      confirmOnTheWay: 'Confirm you are now on the way to the destination?',
+      confirmArrived: 'Confirm you have arrived at the destination city?',
+      confirm: 'Confirm',
     },
     fr: {
       title: 'Mes Livraisons',
@@ -61,6 +78,7 @@ export default function TravelerDeliveriesScreen({ navigation }) {
       pending: 'En attente de collecte',
       picked_up: 'Collecté',
       in_transit: 'En transit',
+      arrived: 'Arrivé à destination',
       delivered: 'Livré',
       amount: 'Montant',
       verifyDelivery: 'Vérifier la Livraison',
@@ -73,6 +91,20 @@ export default function TravelerDeliveriesScreen({ navigation }) {
       deliverySuccessMsg: 'Le colis a été livré avec succès.',
       codeInstruction: 'Demandez au destinataire le code de vérification à 6 chiffres',
       orderNumber: 'Commande #',
+      // New status action translations
+      markReceived: 'Marquer comme reçu',
+      markOnTheWay: 'En route',
+      markArrived: 'Arrivé à destination',
+      receivedSuccess: 'Colis Reçu!',
+      receivedSuccessMsg: 'L\'expéditeur a été informé que vous avez le colis.',
+      onTheWaySuccess: 'Statut Mis à Jour!',
+      onTheWaySuccessMsg: 'L\'expéditeur a été informé que vous êtes en route.',
+      arrivedSuccess: 'Arrivé!',
+      arrivedSuccessMsg: 'L\'expéditeur a été informé de votre arrivée. Il peut maintenant demander au destinataire de venir récupérer le colis.',
+      confirmReceived: 'Confirmer que vous avez reçu ce colis de l\'expéditeur?',
+      confirmOnTheWay: 'Confirmer que vous êtes maintenant en route vers la destination?',
+      confirmArrived: 'Confirmer que vous êtes arrivé dans la ville de destination?',
+      confirm: 'Confirmer',
     },
   };
 
@@ -130,11 +162,65 @@ export default function TravelerDeliveriesScreen({ navigation }) {
         return '#42A5F5';
       case 'in_transit':
         return '#7E57C2';
+      case 'arrived':
+        return '#26A69A';
       case 'delivered':
         return theme.colors.success;
       default:
         return theme.colors.textSecondary;
     }
+  };
+
+  const updateDeliveryStatus = async (delivery, newStatus) => {
+    const statusMessages = {
+      picked_up: { title: text.receivedSuccess, message: text.receivedSuccessMsg },
+      in_transit: { title: text.onTheWaySuccess, message: text.onTheWaySuccessMsg },
+      arrived: { title: text.arrivedSuccess, message: text.arrivedSuccessMsg },
+    };
+
+    const confirmMessages = {
+      picked_up: text.confirmReceived,
+      in_transit: text.confirmOnTheWay,
+      arrived: text.confirmArrived,
+    };
+
+    Alert.alert(
+      text.confirm,
+      confirmMessages[newStatus],
+      [
+        { text: text.cancel, style: 'cancel' },
+        {
+          text: text.confirm,
+          onPress: async () => {
+            try {
+              setUpdatingStatus(delivery.id);
+
+              // Update the shipment status in sender's shipments
+              const shipmentRef = doc(db, 'users', delivery.senderId, 'shipments', delivery.id);
+              const updateData = {
+                status: newStatus,
+                [`${newStatus}At`]: new Date(),
+              };
+              await updateDoc(shipmentRef, updateData);
+
+              // Show success message
+              Alert.alert(
+                statusMessages[newStatus].title,
+                statusMessages[newStatus].message
+              );
+
+              // Reload deliveries to show updated status
+              loadDeliveries();
+            } catch (error) {
+              console.error('Error updating delivery status:', error);
+              Alert.alert('Error', 'Failed to update status. Please try again.');
+            } finally {
+              setUpdatingStatus(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getStatusText = (status) => {
@@ -239,7 +325,44 @@ export default function TravelerDeliveriesScreen({ navigation }) {
         </View>
       </View>
 
-      {item.status !== 'delivered' && (
+      {/* Status Action Buttons */}
+      {item.status === 'pending' && (
+        <TouchableOpacity
+          style={[styles.statusActionButton, { backgroundColor: '#42A5F5' }]}
+          onPress={() => updateDeliveryStatus(item, 'picked_up')}
+          activeOpacity={0.8}
+          disabled={updatingStatus === item.id}
+        >
+          <Ionicons name="cube-outline" size={20} color="#FFFFFF" />
+          <Text style={styles.statusActionButtonText}>{text.markReceived}</Text>
+        </TouchableOpacity>
+      )}
+
+      {item.status === 'picked_up' && (
+        <TouchableOpacity
+          style={[styles.statusActionButton, { backgroundColor: '#7E57C2' }]}
+          onPress={() => updateDeliveryStatus(item, 'in_transit')}
+          activeOpacity={0.8}
+          disabled={updatingStatus === item.id}
+        >
+          <Ionicons name="airplane-outline" size={20} color="#FFFFFF" />
+          <Text style={styles.statusActionButtonText}>{text.markOnTheWay}</Text>
+        </TouchableOpacity>
+      )}
+
+      {item.status === 'in_transit' && (
+        <TouchableOpacity
+          style={[styles.statusActionButton, { backgroundColor: '#26A69A' }]}
+          onPress={() => updateDeliveryStatus(item, 'arrived')}
+          activeOpacity={0.8}
+          disabled={updatingStatus === item.id}
+        >
+          <Ionicons name="location-outline" size={20} color="#FFFFFF" />
+          <Text style={styles.statusActionButtonText}>{text.markArrived}</Text>
+        </TouchableOpacity>
+      )}
+
+      {item.status === 'arrived' && (
         <TouchableOpacity
           style={styles.verifyButton}
           onPress={() => openVerifyModal(item)}
@@ -545,6 +668,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   verifyButtonText: {
+    ...theme.typography.button,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  statusActionButton: {
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  statusActionButtonText: {
     ...theme.typography.button,
     color: '#FFFFFF',
     fontWeight: '600',

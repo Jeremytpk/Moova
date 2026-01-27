@@ -104,6 +104,7 @@ export default function UserShipmentsScreen({ route, navigation }) {
   const getStatusColor = (status) => {
     switch (status) {
       case 'delivered': return theme.colors.success;
+      case 'arrived': return '#26A69A';
       case 'in_transit': return theme.colors.primary;
       case 'picked_up': return theme.colors.warning;
       case 'pending': return theme.colors.textSecondary;
@@ -114,6 +115,7 @@ export default function UserShipmentsScreen({ route, navigation }) {
   const getStatusLabel = (status) => {
     switch (status) {
       case 'delivered': return 'Delivered';
+      case 'arrived': return 'Arrived - Ready for Pickup';
       case 'in_transit': return 'In Transit';
       case 'picked_up': return 'Picked Up';
       case 'pending': return 'Pending';
@@ -124,7 +126,7 @@ export default function UserShipmentsScreen({ route, navigation }) {
   const calculateStats = () => {
     const delivered = items.filter(i => i.status === 'delivered').length;
     const pending = items.filter(i => i.status === 'pending').length;
-    const inTransit = items.filter(i => i.status === 'in_transit' || i.status === 'picked_up').length;
+    const inTransit = items.filter(i => i.status === 'in_transit' || i.status === 'picked_up' || i.status === 'arrived').length;
     const totalAmount = items.reduce((sum, i) => sum + (i.amount || 0), 0);
     return { delivered, pending, inTransit, totalAmount };
   };

@@ -1,5 +1,5 @@
 const { onCall } = require('firebase-functions/v2/https');
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const { Expo } = require('expo-server-sdk');
@@ -743,3 +743,96 @@ exports.onReviewCreated = onDocumentCreated('reviews/{reviewId}', async (event) 
     console.error('Error sending new review notification:', error);
   }
 });
+
+/**
+ * Firestore Trigger: Send notification when shipment status is updated
+ * Notifies the sender about package status changes
+ */
+exports.onShipmentStatusUpdated = onDocumentUpdated(
+  'users/{userId}/shipments/{shipmentId}',
+  async (event) => {
+    try {
+      const beforeData = event.data.before.data();
+      const afterData = event.data.after.data();
+      const { userId } = event.params;
+
+      // Check if status actually changed
+      if (beforeData.status === afterData.status) {
+        console.log('Status unchanged, skipping notification');
+        return;
+      }
+
+      const newStatus = afterData.status;
+      const travelerName = afterData.travelerName || 'Your traveler';
+      const orderNumber = afterData.orderNumber || '';
+
+      console.log('Shipment status updated:', {
+        userId,
+        orderNumber,
+        oldStatus: beforeData.status,
+        newStatus: newStatus,
+      });
+
+      // Get the sender's push token
+      const db = admin.firestore();
+      const userDoc = await db.collection('users').doc(userId).get();
+
+      if (!userDoc.exists) {
+        console.log('User not found');
+        return;
+      }
+
+      const userData = userDoc.data();
+      const pushToken = userData.expoPushToken;
+
+      if (!pushToken) {
+        console.log('User does not have a push token');
+        return;
+      }
+
+      // Define notification messages for each status
+      const statusNotifications = {
+        picked_up: {
+          title: '📦 Package Picked Up!',
+          body: `${travelerName} has received your package (Order #${orderNumber}). It's now with the traveler.`,
+        },
+        in_transit: {
+          title: '✈️ Package On The Way!',
+          body: `${travelerName} is now traveling with your package (Order #${orderNumber}). Your package is on its way to the destination.`,
+        },
+        arrived: {
+          title: '📍 Traveler Has Arrived!',
+          body: `${travelerName} has arrived at the destination with your package (Order #${orderNumber}). Please notify the recipient to pick up the package.`,
+        },
+        delivered: {
+          title: '✅ Package Delivered!',
+          body: `Your package (Order #${orderNumber}) has been successfully delivered. Thank you for using Moova!`,
+        },
+      };
+
+      const notification = statusNotifications[newStatus];
+
+      if (!notification) {
+        console.log('No notification defined for status:', newStatus);
+        return;
+      }
+
+      // Send notification
+      await sendPushNotifications([pushToken], {
+        title: notification.title,
+        body: notification.body,
+        data: {
+          type: 'shipment_status_update',
+          shipmentId: event.params.shipmentId,
+          orderNumber: orderNumber,
+          status: newStatus,
+        },
+        channelId: 'default',
+      });
+
+      console.log(`Sent status update notification to sender ${userId} for status: ${newStatus}`);
+    } catch (error) {
+      console.error('Error sending shipment status notification:', error);
+    }
+  }
+);
