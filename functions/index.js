@@ -125,14 +125,13 @@ exports.createPaymentSheet = onCall(
         { apiVersion: '2023-10-16' }
       );
 
-      // Create a PaymentIntent
+      // Create a PaymentIntent with Apple Pay and Cash App Pay support
       const paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(amount * 100), // Stripe uses cents
         currency: currency,
         customer: customerId,
-        automatic_payment_methods: {
-          enabled: true,
-        },
+        // Enable specific payment methods: card, Apple Pay (via card), and Cash App
+        payment_method_types: ['card', 'cashapp'],
         metadata: {
           userId: auth.uid,
           kg: kg.toString(),
@@ -194,11 +193,11 @@ exports.createPaymentIntent = onCall(
       userId: auth.uid,
     });
 
-    // Create a PaymentIntent with Stripe
+    // Create a PaymentIntent with Stripe (card payments for web)
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // Stripe uses cents
       currency: currency,
-      payment_method_types: ['card'], // Explicitly specify card payments
+      payment_method_types: ['card'], // Web only supports card payments
       metadata: {
         userId: auth.uid,
         kg: kg.toString(),

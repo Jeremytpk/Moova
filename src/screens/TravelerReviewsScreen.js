@@ -36,6 +36,17 @@ export default function TravelerReviewsScreen({ route, navigation }) {
       reviewsPlural: 'reviews',
       showUsername: 'Show my username',
       anonymous: 'Anonymous',
+      loginRequired: 'Login Required',
+      loginRequiredMessage: 'You need to be logged in to leave a review.',
+      addReview: 'Add Review',
+      submitReview: 'Submit Review',
+      submitting: 'Submitting...',
+      cancel: 'Cancel',
+      leaveReview: 'Leave a Review',
+      rateExperience: 'Rate your experience:',
+      writeComment: 'Write a comment (optional)',
+      yourNameWillBe: 'Your name will appear as:',
+      postedAnonymously: 'Your review will be posted anonymously',
     },
     fr: {
       reviews: 'Avis',
@@ -48,6 +59,17 @@ export default function TravelerReviewsScreen({ route, navigation }) {
       reviewsPlural: 'avis',
       showUsername: 'Afficher mon nom',
       anonymous: 'Anonyme',
+      loginRequired: 'Connexion requise',
+      loginRequiredMessage: 'Vous devez être connecté pour laisser un avis.',
+      addReview: 'Laisser un avis',
+      submitReview: 'Envoyer l\'avis',
+      submitting: 'Envoi...',
+      cancel: 'Annuler',
+      leaveReview: 'Laisser un avis',
+      rateExperience: 'Notez votre expérience :',
+      writeComment: 'Écrivez un commentaire (optionnel)',
+      yourNameWillBe: 'Votre nom apparaîtra comme :',
+      postedAnonymously: 'Votre avis sera publié de manière anonyme',
     },
   };
 
@@ -252,9 +274,26 @@ export default function TravelerReviewsScreen({ route, navigation }) {
       </View>
 
       {/* Add Review Button */}
-      <TouchableOpacity style={{ margin: 16, backgroundColor: theme.colors.primary, borderRadius: 8, padding: 12, alignItems: 'center' }} onPress={() => setShowReviewModal(true)}>
-        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{language === 'en' ? 'Add Review' : 'Laisser un avis'}</Text>
-      </TouchableOpacity>
+      {currentUser?.uid !== userId && (
+        <TouchableOpacity 
+          style={{ margin: 16, backgroundColor: theme.colors.primary, borderRadius: 8, padding: 12, alignItems: 'center' }} 
+          onPress={() => {
+            if (currentUser) {
+              setShowReviewModal(true);
+            } else {
+              Alert.alert(
+                text.loginRequired,
+                text.loginRequiredMessage,
+                [
+                  { text: 'OK', onPress: () => navigation.navigate('AuthFlow') }
+                ]
+              );
+            }
+          }}
+        >
+          <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{text.addReview}</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Reviews list */}
       {reviews.length > 0 ? (
@@ -275,8 +314,8 @@ export default function TravelerReviewsScreen({ route, navigation }) {
       <Modal visible={showReviewModal} animationType="slide" transparent onRequestClose={() => setShowReviewModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ backgroundColor: theme.colors.background, borderRadius: 16, padding: 24, width: '85%', maxWidth: 350, alignSelf: 'center' }}>
-            <Text style={{ fontSize: 20, fontWeight: 'bold', color: theme.colors.primary, marginBottom: 10, textAlign: 'center' }}>{language === 'en' ? 'Leave a Review' : 'Laisser un avis'}</Text>
-            <Text style={{ color: theme.colors.text, fontSize: 15, textAlign: 'center', marginBottom: 18 }}>{language === 'en' ? 'Rate your experience:' : 'Notez votre expérience :'}</Text>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: theme.colors.primary, marginBottom: 10, textAlign: 'center' }}>{text.leaveReview}</Text>
+            <Text style={{ color: theme.colors.text, fontSize: 15, textAlign: 'center', marginBottom: 18 }}>{text.rateExperience}</Text>
             <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 16 }}>
               {[1,2,3,4,5].map(i => (
                 <TouchableOpacity key={i} onPress={() => setReviewRating(i)}>
@@ -285,7 +324,7 @@ export default function TravelerReviewsScreen({ route, navigation }) {
               ))}
             </View>
             <TextInput
-              placeholder={language === 'en' ? 'Write a comment (optional)' : 'Écrivez un commentaire (optionnel)'}
+              placeholder={text.writeComment}
               value={reviewComment}
               onChangeText={setReviewComment}
               style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 10, minHeight: 60, marginBottom: 16, color: theme.colors.text }}
@@ -317,12 +356,12 @@ export default function TravelerReviewsScreen({ route, navigation }) {
             </TouchableOpacity>
             {!isAnonymous && currentUser?.username && (
               <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginBottom: 12, textAlign: 'center' }}>
-                {language === 'en' ? 'Your name will appear as:' : 'Votre nom apparaîtra comme :'} <Text style={{ fontWeight: '600', color: theme.colors.text }}>{currentUser.username}</Text>
+                {text.yourNameWillBe} <Text style={{ fontWeight: '600', color: theme.colors.text }}>{currentUser.username}</Text>
               </Text>
             )}
             {isAnonymous && (
               <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginBottom: 12, textAlign: 'center' }}>
-                {language === 'en' ? 'Your review will be posted anonymously' : 'Votre avis sera publié de manière anonyme'}
+                {text.postedAnonymously}
               </Text>
             )}
             <TouchableOpacity
@@ -330,10 +369,10 @@ export default function TravelerReviewsScreen({ route, navigation }) {
               onPress={handleSubmitReview}
               disabled={submitting}
             >
-              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{submitting ? (language === 'en' ? 'Submitting...' : 'Envoi...') : (language === 'en' ? 'Submit Review' : 'Envoyer l\'avis')}</Text>
+              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{submitting ? text.submitting : text.submitReview}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={{ alignItems: 'center', padding: 8 }} onPress={() => setShowReviewModal(false)}>
-              <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>{language === 'en' ? 'Cancel' : 'Annuler'}</Text>
+              <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>{text.cancel}</Text>
             </TouchableOpacity>
           </View>
         </View>

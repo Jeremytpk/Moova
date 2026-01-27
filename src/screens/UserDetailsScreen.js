@@ -37,6 +37,7 @@ export default function UserDetailsScreen({ route, navigation }) {
   const [editFields, setEditFields] = useState({
     isAdmin: false,
     isTraveler: false,
+    isDeactivated: false,
   });
   const [saving, setSaving] = useState(false);
 
@@ -57,6 +58,7 @@ export default function UserDetailsScreen({ route, navigation }) {
         setEditFields({
           isAdmin: !!userData.isAdmin,
           isTraveler: !!userData.isTraveler,
+          isDeactivated: !!userData.isDeactivated,
         });
       }
 
@@ -117,6 +119,7 @@ export default function UserDetailsScreen({ route, navigation }) {
       await updateDoc(doc(db, 'users', userId), {
         isAdmin: editFields.isAdmin,
         isTraveler: editFields.isTraveler,
+        isDeactivated: editFields.isDeactivated,
       });
       setUser({ ...user, ...editFields });
       setEditModalVisible(false);
@@ -202,6 +205,11 @@ export default function UserDetailsScreen({ route, navigation }) {
         <Text style={styles.userName}>{user.username || user.name || 'No Name'}</Text>
         <Text style={styles.userEmail}>{user.email}</Text>
         <View style={styles.badgesRow}>
+          {user.isDeactivated && (
+            <View style={[styles.badge, styles.deactivatedBadge]}>
+              <Text style={styles.badgeText}>Deactivated</Text>
+            </View>
+          )}
           {user.isAdmin && (
             <View style={[styles.badge, styles.adminBadge]}>
               <Text style={styles.badgeText}>Admin</Text>
@@ -212,7 +220,7 @@ export default function UserDetailsScreen({ route, navigation }) {
               <Text style={styles.badgeText}>Traveler</Text>
             </View>
           )}
-          {!user.isAdmin && !user.isTraveler && (
+          {!user.isAdmin && !user.isTraveler && !user.isDeactivated && (
             <View style={[styles.badge, styles.userBadge]}>
               <Text style={[styles.badgeText, { color: theme.colors.textSecondary }]}>User</Text>
             </View>
@@ -399,7 +407,7 @@ export default function UserDetailsScreen({ route, navigation }) {
           style={styles.actionButton}
           onPress={() => setEditModalVisible(true)}
         >
-          <Text style={styles.actionButtonText}>Edit User Roles</Text>
+          <Text style={styles.actionButtonText}>Edit User</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionButton, styles.dangerButton]}
@@ -413,7 +421,7 @@ export default function UserDetailsScreen({ route, navigation }) {
       <Modal visible={editModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit User Roles</Text>
+            <Text style={styles.modalTitle}>Edit User</Text>
             <Text style={styles.modalSubtitle}>{user.username || user.email}</Text>
 
             <View style={styles.switchRow}>
@@ -431,6 +439,20 @@ export default function UserDetailsScreen({ route, navigation }) {
                 value={editFields.isTraveler}
                 onValueChange={(v) => setEditFields({ ...editFields, isTraveler: v })}
                 trackColor={{ true: theme.colors.success }}
+              />
+            </View>
+
+            <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+              <View>
+                <Text style={styles.switchLabel}>Deactivate Account</Text>
+                <Text style={styles.switchDescription}>
+                  {editFields.isDeactivated ? 'Account is deactivated' : 'Account is active'}
+                </Text>
+              </View>
+              <Switch
+                value={editFields.isDeactivated}
+                onValueChange={(v) => setEditFields({ ...editFields, isDeactivated: v })}
+                trackColor={{ true: theme.colors.error }}
               />
             </View>
 
@@ -513,6 +535,9 @@ const styles = StyleSheet.create({
   },
   travelerBadge: {
     backgroundColor: theme.colors.success,
+  },
+  deactivatedBadge: {
+    backgroundColor: theme.colors.error,
   },
   userBadge: {
     backgroundColor: 'rgba(255,255,255,0.3)',
@@ -706,6 +731,11 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     color: theme.colors.text,
+  },
+  switchDescription: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
   },
   modalActions: {
     flexDirection: 'row',

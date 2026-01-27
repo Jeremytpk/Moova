@@ -8,7 +8,7 @@ import UserPayoutsScreen from './src/screens/UserPayoutsScreen';
 import ContactUs from './src/screens/ContactUs';
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { navigationRef, flushNavigationQueue } from './src/RootNavigation';
+import { navigationRef, flushNavigationQueue, navigate } from './src/RootNavigation';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
@@ -21,7 +21,7 @@ import { ProfileIcon, SearchIcon, PackageIcon, ShipmentIcon, ChatIcon } from './
 import { LanguageProvider, useLanguage } from './src/contexts/LanguageContext';
 import { UnreadMessagesProvider } from './src/contexts/UnreadMessagesContext';
 import { registerForPushNotifications, addNotificationResponseListener } from './src/utils/pushNotifications';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useUnreadMessages } from './src/contexts/UnreadMessagesContext';
 
 // Conditionally import Stripe providers
@@ -57,6 +57,7 @@ import TermsConditionsScreen from './src/screens/TermsConditionsScreen';
 import LanguageSelectionScreen from './src/screens/LanguageSelectionScreen';
 import TravelerReviewsScreen from './src/screens/TravelerReviewsScreen';
 import MoovaWebsiteScreen from './src/screens/MoovaWebsiteScreen';
+import DeactivatedAccountScreen from './src/screens/DeactivatedAccountScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -134,6 +135,28 @@ function AppNavigator() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
+
+    const db = getFirestore();
+    const unsub = onSnapshot(doc(db, "users", user.uid), (doc) => {
+      const userData = doc.data();
+      const currentRoute = navigationRef.current?.getCurrentRoute()?.name;
+
+      if (userData?.isDeactivated) {
+        if (currentRoute !== 'DeactivatedAccountScreen') {
+          navigate('DeactivatedAccountScreen');
+        }
+      } else {
+        if (currentRoute === 'DeactivatedAccountScreen') {
+          navigate('MainTabs');
+        }
+      }
+    });
+
+    return () => unsub();
+  }, [user]);
+
+  useEffect(() => {
     // Skip on web - notifications don't work on web
     if (Platform.OS === 'web') {
       return;
@@ -204,6 +227,7 @@ function AppNavigator() {
         <Stack.Screen name="ProfileDetailsScreen" component={ProfileDetailsScreen} options={{ title: 'Profile Details' }} />
         <Stack.Screen name="TravelerReviews" component={TravelerReviewsScreen} options={{ title: titles.reviews }} />
         <Stack.Screen name="MoovaWebsite" component={MoovaWebsiteScreen} options={{ title: titles.aboutMoova }} />
+        <Stack.Screen name="DeactivatedAccountScreen" component={DeactivatedAccountScreen} options={{ headerShown: false, gestureEnabled: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

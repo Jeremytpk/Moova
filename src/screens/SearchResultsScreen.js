@@ -9,6 +9,8 @@ import {
   TextInput,
   Image,
   Modal,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
@@ -855,9 +857,9 @@ const styles = StyleSheet.create({
   // Hero Section
   heroSection: {
     backgroundColor: theme.colors.primary,
-    paddingTop: theme.spacing.xxl,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + theme.spacing.md : theme.spacing.xxl,
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.lg,
+    paddingBottom: Platform.OS === 'android' ? theme.spacing.xl + theme.spacing.lg : theme.spacing.lg,
     borderBottomLeftRadius: theme.borderRadius.xl,
     borderBottomRightRadius: theme.borderRadius.xl,
     ...theme.shadows.lg,
@@ -945,6 +947,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.lg,
     ...theme.shadows.md,
     elevation: 4,
+    zIndex: 10,
+    position: 'relative',
   },
   searchInputContainer: {
     flexDirection: 'row',
