@@ -18,15 +18,15 @@ import { useLanguage } from '../contexts/LanguageContext';
 
 // --- PLATFORM SPECIFIC IMPORTS ---
 // We use 'require' for Native-only modules to prevent Web bundler errors.
-let CardField, PlatformPay;
+let CardField, PlatformPay, useStripeNative;
 if (Platform.OS !== 'web') {
   const StripeNative = require('@stripe/stripe-react-native');
   CardField = StripeNative.CardField;
   PlatformPay = StripeNative.PlatformPay;
+  useStripeNative = StripeNative.useStripe;
 }
 
-// Import hooks unconditionally from both libraries
-import { useStripe as useStripeNative } from '@stripe/stripe-react-native';
+// Import Stripe Web SDK (only used on web)
 import * as StripeWeb from '@stripe/react-stripe-js';
 
 export default function PaymentModal({
