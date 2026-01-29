@@ -1,8 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Platform } from 'react-native';
 import theme from '../theme';
 import { useLanguage } from '../contexts/LanguageContext';
 import AutoSwipeBanner from '../components/AutoSwipeBanner';
+import { ArrowRightIcon } from '../components/Icons';
+
+// APK download URL from Firebase Storage
+const APK_DOWNLOAD_URL = 'https://firebasestorage.googleapis.com/v0/b/moova-ff8e6.firebasestorage.app/o/moova_apk%2FMoova_Android.apk?alt=media';
 
 export default function MoovaWebsiteScreen() {
   const { language } = useLanguage();
@@ -22,6 +26,9 @@ export default function MoovaWebsiteScreen() {
         'Shipment tracking',
         'Multi-language support (English and French)',
       ],
+      downloadTitle: 'Download for Android',
+      downloadDescription: 'Get the Moova app directly on your Android device.',
+      downloadButton: 'Download APK',
       poweredBy: 'Powered by Jerttech',
       ads: {
         traveler: {
@@ -44,6 +51,9 @@ export default function MoovaWebsiteScreen() {
         'Suivi des expéditions',
         'Support multilingue (anglais et français)',
       ],
+      downloadTitle: 'Télécharger pour Android',
+      downloadDescription: 'Obtenez l\'application Moova directement sur votre appareil Android.',
+      downloadButton: 'Télécharger APK',
       poweredBy: 'Propulsé par Jerttech',
       ads: {
         traveler: {
@@ -95,6 +105,22 @@ export default function MoovaWebsiteScreen() {
             </View>
           ))}
         </View>
+
+        {/* Android APK Download Section */}
+        {(Platform.OS === 'android' || Platform.OS === 'web') && (
+          <View style={styles.downloadSection}>
+            <Text style={styles.downloadTitle}>{text.downloadTitle}</Text>
+            <Text style={styles.downloadDescription}>{text.downloadDescription}</Text>
+            <TouchableOpacity
+              style={styles.downloadButton}
+              onPress={() => Linking.openURL(APK_DOWNLOAD_URL)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.downloadButtonText}>{text.downloadButton}</Text>
+              <ArrowRightIcon size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <Text style={styles.poweredBy}>{text.poweredBy}</Text>
       </View>
@@ -189,5 +215,43 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     textAlign: 'center',
     marginTop: theme.spacing.lg,
+  },
+  downloadSection: {
+    backgroundColor: theme.colors.success + '15',
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.success + '30',
+  },
+  downloadTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: theme.spacing.sm,
+  },
+  downloadDescription: {
+    ...theme.typography.body,
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    marginBottom: theme.spacing.md,
+    lineHeight: 20,
+  },
+  downloadButton: {
+    backgroundColor: theme.colors.success,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.borderRadius.md,
+    gap: theme.spacing.sm,
+  },
+  downloadButtonText: {
+    ...theme.typography.button,
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

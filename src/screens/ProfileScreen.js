@@ -470,10 +470,10 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.actionText}>{text.language}</Text>
             <Text style={styles.languageValue}>{language === 'en' ? 'English' : 'Français'}</Text>
           </TouchableOpacity>
-          {/* View Tutorial / Onboarding */}
+          {/* How It Works */}
           <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => rootNavigate('Onboarding')}
+            onPress={() => rootNavigate('HowItWorks')}
           >
             <View style={styles.actionIconContainer}>
               <BookIcon size={20} color={theme.colors.primary} />

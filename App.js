@@ -58,6 +58,9 @@ import LanguageSelectionScreen from './src/screens/LanguageSelectionScreen';
 import TravelerReviewsScreen from './src/screens/TravelerReviewsScreen';
 import MoovaWebsiteScreen from './src/screens/MoovaWebsiteScreen';
 import DeactivatedAccountScreen from './src/screens/DeactivatedAccountScreen';
+import HowItWorksSenderScreen from './src/screens/HowItWorksSenderScreen';
+import HowItWorksTravelerScreen from './src/screens/HowItWorksTravelerScreen';
+import HowItWorksScreen from './src/screens/HowItWorksScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -114,8 +117,8 @@ function AppNavigator() {
   const localNavigationRef = React.useRef();
 
   const headerTitles = {
-    en: { offerDetails: 'Offer Details', chat: 'Chat', signIn: 'Sign In', createOffer: 'Create New Offer', setupTraveler: 'Traveler Setup', reviews: 'Reviews', privacyPolicy: 'Privacy Policy', termsConditions: 'Terms & Conditions', aboutMoova: 'About Moova' },
-    fr: { offerDetails: 'Détails de l\'Offre', chat: 'Discussion', signIn: 'Se Connecter', createOffer: 'Créer une Nouvelle Offre', setupTraveler: 'Configuration Voyageur', reviews: 'Avis', privacyPolicy: 'Politique de Confidentialité', termsConditions: 'Conditions Générales', aboutMoova: 'À propos de Moova' },
+    en: { offerDetails: 'Offer Details', chat: 'Chat', signIn: 'Sign In', createOffer: 'Create New Offer', setupTraveler: 'Traveler Setup', reviews: 'Reviews', privacyPolicy: 'Privacy Policy', termsConditions: 'Terms & Conditions', aboutMoova: 'About Moova', howItWorks: 'How It Works', howItWorksSender: 'How to Send', howItWorksTraveler: 'How to Earn' },
+    fr: { offerDetails: 'Détails de l\'Offre', chat: 'Discussion', signIn: 'Se Connecter', createOffer: 'Créer une Nouvelle Offre', setupTraveler: 'Configuration Voyageur', reviews: 'Avis', privacyPolicy: 'Politique de Confidentialité', termsConditions: 'Conditions Générales', aboutMoova: 'À propos de Moova', howItWorks: 'Comment Ça Marche', howItWorksSender: 'Comment Envoyer', howItWorksTraveler: 'Comment Gagner' },
   };
   const titles = headerTitles[language];
 
@@ -223,6 +226,9 @@ function AppNavigator() {
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: titles.privacyPolicy }} />
         <Stack.Screen name="ContactUs" component={ContactUs} options={{ title: 'Contact Us' }} />
         <Stack.Screen name="TermsConditions" component={TermsConditionsScreen} options={{ title: titles.termsConditions }} />
+        <Stack.Screen name="HowItWorks" component={HowItWorksScreen} options={{ title: titles.howItWorks }} />
+        <Stack.Screen name="HowItWorksSender" component={HowItWorksSenderScreen} options={{ title: titles.howItWorksSender }} />
+        <Stack.Screen name="HowItWorksTraveler" component={HowItWorksTravelerScreen} options={{ title: titles.howItWorksTraveler }} />
         <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
         <Stack.Screen name="ProfileDetailsScreen" component={ProfileDetailsScreen} options={{ title: 'Profile Details' }} />
         <Stack.Screen name="TravelerReviews" component={TravelerReviewsScreen} options={{ title: titles.reviews }} />
