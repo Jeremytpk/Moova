@@ -1,0 +1,9 @@
+# Add a French flag icon for the language selector
+# You can replace this with a higher quality flag if desired.
+# This is a simple PNG flag for France, 24x18px.
+
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 18">
+  <rect width="8" height="18" fill="#0055A4"/>
+  <rect x="8" width="8" height="18" fill="#fff"/>
+  <rect x="16" width="8" height="18" fill="#EF4135"/>
+</svg>
